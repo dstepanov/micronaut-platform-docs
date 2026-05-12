@@ -15,6 +15,11 @@ const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-labe
 const sidebarToggle = document.querySelector(".sidebar-toggle");
 const sidebarContent = document.querySelector(".sidebar-content");
 const themeSwitcher = document.querySelector("[data-theme-switcher]");
+const projectFilterRoot = document.querySelector("[data-project-filter]");
+const projectFilterToggle = document.querySelector("[data-project-filter-toggle]");
+const projectFilterInput = document.querySelector("[data-project-filter-input]");
+const projectFilterClear = document.querySelector("[data-project-filter-clear]");
+const projectFilterEmpty = document.querySelector("[data-project-filter-empty]");
 const searchRoot = document.querySelector("[data-search]");
 const searchInput = document.querySelector("[data-search-input]");
 const searchClear = document.querySelector("[data-search-clear]");
@@ -90,6 +95,70 @@ function searchTokens(value) {
         .split(/\s+/)
         .filter((token) => token.length > 1)
         .slice(0, 6);
+}
+
+function projectFilterTokens(value) {
+    return normalizeSearchText(value)
+        .split(/\s+/)
+        .filter((token) => token.length > 0);
+}
+
+function projectFilterText(project, data) {
+    return normalizeSearchText(project + " " + (data.summary?.textContent || ""));
+}
+
+function updateProjectFilterUiState() {
+    const hasValue = Boolean(projectFilterInput?.value);
+    const open = Boolean(projectFilterRoot && !projectFilterRoot.hidden);
+    if (projectFilterToggle) {
+        projectFilterToggle.setAttribute("aria-expanded", String(open));
+        projectFilterToggle.classList.toggle("active", open || hasValue);
+    }
+    if (projectFilterClear) {
+        projectFilterClear.hidden = !hasValue;
+        projectFilterClear.setAttribute("aria-hidden", String(!hasValue));
+        projectFilterClear.tabIndex = hasValue ? 0 : -1;
+    }
+    if (projectFilterRoot) {
+        projectFilterRoot.classList.toggle("has-value", hasValue);
+    }
+}
+
+function applyProjectFilter() {
+    const tokens = projectFilterTokens(projectFilterInput?.value || "");
+    let visibleProjects = 0;
+    for (const [project, data] of projectSections.entries()) {
+        const matches = tokens.every((token) => projectFilterText(project, data).includes(token));
+        data.section.hidden = !matches;
+        if (matches) {
+            visibleProjects++;
+        }
+    }
+    if (projectFilterEmpty) {
+        projectFilterEmpty.hidden = !tokens.length || visibleProjects > 0;
+    }
+    updateProjectFilterUiState();
+}
+
+function clearProjectFilter() {
+    if (projectFilterInput) {
+        projectFilterInput.value = "";
+    }
+    applyProjectFilter();
+}
+
+function setProjectFilterOpen(open) {
+    if (!projectFilterRoot) {
+        return;
+    }
+    if (!open) {
+        clearProjectFilter();
+    }
+    projectFilterRoot.hidden = !open;
+    updateProjectFilterUiState();
+    if (open) {
+        projectFilterInput?.focus();
+    }
 }
 
 function updateSearchUiState() {
@@ -958,6 +1027,21 @@ sidebarCollapse?.addEventListener("click", () => {
     }
 });
 
+projectFilterToggle?.addEventListener("click", () => {
+    setProjectFilterOpen(projectFilterRoot?.hidden ?? true);
+});
+projectFilterInput?.addEventListener("input", applyProjectFilter);
+projectFilterInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+        event.preventDefault();
+        setProjectFilterOpen(false);
+    }
+});
+projectFilterClear?.addEventListener("click", () => {
+    clearProjectFilter();
+    projectFilterInput?.focus();
+});
+
 themeSwitcher?.addEventListener("click", () => switchTheme());
 
 searchInput?.addEventListener("input", queueSearch);
@@ -1055,4 +1139,5 @@ if (!initialSectionId || initialSectionId === overviewHash) {
 if (!document.body.classList.contains("overview-active")) {
     queueScrollSpy();
 }
+updateProjectFilterUiState();
 updateSearchUiState();

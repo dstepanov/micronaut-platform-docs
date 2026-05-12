@@ -26,7 +26,22 @@
             </div>
             <nav class="sidebar-content toc" aria-label="Projects">
                 <section class="sidebar-group">
-                    <div class="sidebar-group-label">Projects</div>
+                    <div class="sidebar-group-heading">
+                        <span class="sidebar-group-label">Projects</span>
+                        <button class="project-filter-toggle" type="button" aria-controls="project-filter" aria-expanded="false" title="Filter projects" aria-label="Filter projects" data-project-filter-toggle>
+                            {{{icons.search}}}
+                        </button>
+                    </div>
+                    <div id="project-filter" class="project-filter" data-project-filter hidden>
+                        <div class="project-filter-field">
+                            {{{icons.search}}}
+                            <input id="project-filter-input" type="search" placeholder="Filter projects" aria-label="Filter projects" autocomplete="off" spellcheck="false" data-project-filter-input>
+                            <button class="project-filter-clear" type="button" title="Clear project filter" aria-label="Clear project filter" data-project-filter-clear hidden>
+                                {{{icons.x}}}
+                            </button>
+                        </div>
+                        <div class="project-filter-empty" data-project-filter-empty hidden>No projects found</div>
+                    </div>
                     <div class="sidebar-projects">
 {{#each documents}}
                         <details class="project-section" data-project-nav="{{slug}}"{{#if selected}} open{{/if}}>
