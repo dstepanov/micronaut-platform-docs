@@ -20,7 +20,7 @@
 }
 
 html {
-    scroll-behavior: smooth;
+    scroll-padding-top: 80px;
 }
 
 body {
@@ -658,6 +658,11 @@ body.dark-mode .theme-icon-sun {
     overflow-x: hidden;
     overflow-x: clip;
     padding: 24px clamp(20px, 4vw, 56px) 56px;
+}
+
+.guide-document > .sect1 {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 900px;
 }
 
 .document-meta {

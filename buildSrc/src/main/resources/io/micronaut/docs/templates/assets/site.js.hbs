@@ -3,18 +3,25 @@ const firstSections = {
     "{{{project}}}": "{{{section}}}"{{#unless @last}},{{/unless}}
 {{/each}}
 };
+const projectSlugs = Object.keys(firstSections);
+const projectSlugsByLength = [...projectSlugs].sort((left, right) => right.length - left.length);
 const projectOptions = Array.from(document.querySelectorAll("[data-project-option]"));
 const sidebarCollapse = document.querySelector(".sidebar-collapse");
 const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-label]");
 const sidebarToggle = document.querySelector(".sidebar-toggle");
 const sidebarContent = document.querySelector(".sidebar-content");
 const themeSwitcher = document.querySelector("[data-theme-switcher]");
-const projectDocuments = Array.from(document.querySelectorAll("[data-project]"));
-const projectSections = Array.from(document.querySelectorAll("[data-project-nav]"));
+const projectArticles = new Map(Array.from(document.querySelectorAll("article.guide-document[data-project]")).map((article) => [article.dataset.project, article]));
+const projectSections = new Map(projectOptions.map((summary) => {
+    const section = summary.closest("[data-project-nav]");
+    return [section.dataset.projectNav, { section, summary, article: projectArticles.get(section.dataset.projectNav) }];
+}));
 const themeStorageKey = "theme";
 const headingCache = new Map();
 let activeSectionId = "";
+let activeLink;
 let scrollSpyFrame = 0;
+let contentScrollFrame = 0;
 
 function copyText(element) {
     let range;
@@ -90,18 +97,20 @@ window.switchTheme = switchTheme;
 
 function projectFromHash() {
     const hash = decodeURIComponent(window.location.hash.slice(1));
-    return Object.keys(firstSections).find((project) => hash.startsWith(project + "-"));
+    return projectFromSectionId(hash);
 }
 
-function projectDocument(project) {
-    return projectDocuments.find((element) => element.dataset.project === project);
+function projectFromSectionId(sectionId) {
+    return projectSlugsByLength.find((project) => sectionId.startsWith(project + "-"));
 }
 
 function sectionHeadings(project) {
     if (!headingCache.has(project)) {
-        const article = projectDocument(project);
+        const data = projectSections.get(project);
+        const tocSections = new Set(Array.from(data?.section.querySelectorAll("[data-section]") ?? []).map((link) => link.dataset.section));
+        const article = data?.article;
         const headings = Array.from(article?.querySelectorAll("h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]") ?? [])
-            .filter((heading) => document.querySelector(".toc a[data-section='" + CSS.escape(heading.id) + "']"));
+            .filter((heading) => tocSections.has(heading.id));
         headingCache.set(project, headings);
     }
     return headingCache.get(project);
@@ -145,51 +154,104 @@ function scrollProjectSubmenu(section) {
         const top = submenu.getBoundingClientRect().top - sidebarContent.getBoundingClientRect().top + sidebarContent.scrollTop;
         sidebarContent.scrollTo({
             top: Math.max(0, top),
-            behavior: "smooth"
+            behavior: "auto"
         });
     });
 }
 
-function setProject(project, updateHash, scrollSubmenu) {
+function scrollToSectionNow(sectionId) {
+    const target = document.getElementById(sectionId);
+    if (!target) {
+        return;
+    }
+    target.scrollIntoView({
+        block: "start",
+        behavior: "auto"
+    });
+    const topbarHeight = document.querySelector(".topbar")?.getBoundingClientRect().height ?? 0;
+    const preferredTop = topbarHeight + 16;
+    const targetTop = target.getBoundingClientRect().top;
+    if (Math.abs(targetTop - preferredTop) <= 1) {
+        return;
+    }
+    window.scrollBy({
+        top: targetTop - preferredTop,
+        behavior: "auto"
+    });
+}
+
+function scrollToSection(sectionId) {
+    if (contentScrollFrame) {
+        window.cancelAnimationFrame(contentScrollFrame);
+    }
+    contentScrollFrame = window.requestAnimationFrame(() => {
+        contentScrollFrame = window.requestAnimationFrame(() => {
+            contentScrollFrame = 0;
+            scrollToSectionNow(sectionId);
+            refreshActiveLink(sectionId);
+            queueScrollSpy();
+        });
+    });
+}
+
+function setProject(project, options) {
+    const settings = options || {};
     if (!firstSections[project]) {
-        project = Object.keys(firstSections)[0];
+        project = projectSlugs[0];
     }
     const previousProject = document.body.dataset.project;
-    let activeSection;
+    const previous = projectSections.get(previousProject);
+    const next = projectSections.get(project);
     document.body.dataset.project = project;
-    projectDocuments.forEach((element) => {
-        element.hidden = element.dataset.project !== project;
-    });
-    projectSections.forEach((section) => {
-        const active = section.dataset.projectNav === project;
-        section.classList.toggle("active", active);
-        section.open = active;
-        section.querySelector("[data-project-option]").setAttribute("aria-current", String(active));
-        if (active) {
-            activeSection = section;
+
+    if (previousProject !== project && previous) {
+        if (previous.article) {
+            previous.article.hidden = true;
         }
-    });
-    if (updateHash && !projectFromHash()) {
-        history.replaceState(null, "", "#" + firstSections[project]);
+        previous.section.classList.remove("active");
+        previous.section.open = false;
+        previous.summary.setAttribute("aria-current", "false");
     }
-    refreshActiveLink();
-    queueScrollSpy();
-    if (scrollSubmenu && project !== previousProject) {
-        scrollProjectSubmenu(activeSection);
+    if (next) {
+        if (next.article) {
+            next.article.hidden = false;
+        }
+        next.section.classList.add("active");
+        next.section.open = true;
+        next.summary.setAttribute("aria-current", "true");
+    }
+
+    const firstSection = firstSections[project];
+    if (settings.updateHash && (settings.forceHash || !projectFromHash())) {
+        history.replaceState(null, "", "#" + firstSection);
+    }
+    refreshActiveLink(settings.scrollContent ? firstSection : undefined);
+    if (settings.scrollContent) {
+        scrollToSection(firstSection);
+    } else {
+        queueScrollSpy();
+    }
+    if (settings.scrollSubmenu && project !== previousProject) {
+        scrollProjectSubmenu(next?.section);
     }
 }
 
 function refreshActiveLink(nextActiveSectionId) {
     const activeId = nextActiveSectionId || decodeURIComponent(window.location.hash.slice(1));
-    document.querySelectorAll(".toc a.active").forEach((link) => link.classList.remove("active"));
+    if (activeLink && activeLink.dataset.section !== activeId) {
+        activeLink.classList.remove("active");
+        activeLink = undefined;
+    }
     if (!activeId) {
         return;
     }
-    const activeLink = document.querySelector(".toc a[href='#" + CSS.escape(activeId) + "']");
-    if (activeLink) {
-        activeLink.classList.add("active");
+    const project = projectFromSectionId(activeId) || document.body.dataset.project;
+    const nextLink = projectSections.get(project)?.section.querySelector(".toc a[href='#" + CSS.escape(activeId) + "']");
+    if (nextLink) {
+        nextLink.classList.add("active");
+        activeLink = nextLink;
         activeSectionId = activeId;
-        let parent = activeLink.parentElement;
+        let parent = nextLink.parentElement;
         while (parent) {
             if (parent.tagName === "DETAILS") {
                 parent.open = true;
@@ -208,8 +270,12 @@ projectOptions.forEach((summary) => {
             return;
         }
         const project = section.dataset.projectNav;
-        history.replaceState(null, "", "#" + firstSections[project]);
-        setProject(project, false, true);
+        setProject(project, {
+            updateHash: true,
+            forceHash: true,
+            scrollContent: true,
+            scrollSubmenu: true
+        });
     });
 });
 
@@ -222,31 +288,33 @@ document.addEventListener("click", (event) => {
     if (!hashLink) {
         return;
     }
-    const targetProject = Object.keys(firstSections).find((project) => {
-        return hashLink.hash.slice(1).startsWith(project + "-");
-    });
+    const targetProject = projectFromSectionId(hashLink.hash.slice(1));
     if (targetProject) {
-        setProject(targetProject, false, targetProject !== document.body.dataset.project);
+        setProject(targetProject, {
+            scrollSubmenu: targetProject !== document.body.dataset.project
+        });
         document.body.classList.remove("sidebar-open");
-        sidebarToggle.setAttribute("aria-expanded", "false");
+        sidebarToggle?.setAttribute("aria-expanded", "false");
         window.setTimeout(queueScrollSpy, 0);
     }
 });
 
-sidebarToggle.addEventListener("click", () => {
+sidebarToggle?.addEventListener("click", () => {
     const open = !document.body.classList.contains("sidebar-open");
     document.body.classList.toggle("sidebar-open", open);
     sidebarToggle.setAttribute("aria-expanded", String(open));
 });
 
-sidebarCollapse.addEventListener("click", () => {
+sidebarCollapse?.addEventListener("click", () => {
     const collapsed = !document.body.classList.contains("sidebar-collapsed");
     document.body.classList.toggle("sidebar-collapsed", collapsed);
     sidebarCollapse.setAttribute("aria-expanded", String(!collapsed));
     const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
     sidebarCollapse.setAttribute("aria-label", label);
     sidebarCollapse.setAttribute("title", label);
-    sidebarCollapseLabel.textContent = label;
+    if (sidebarCollapseLabel) {
+        sidebarCollapseLabel.textContent = label;
+    }
 });
 
 themeSwitcher?.addEventListener("click", () => switchTheme(true));
@@ -258,5 +326,7 @@ window.addEventListener("scroll", queueScrollSpy, { passive: true });
 window.addEventListener("resize", queueScrollSpy);
 
 applyTheme(preferredTheme(), false);
-setProject(projectFromHash() || projectOptions[0]?.dataset.projectOption, true);
+setProject(projectFromHash() || projectOptions[0]?.dataset.projectOption, {
+    updateHash: true
+});
 queueScrollSpy();

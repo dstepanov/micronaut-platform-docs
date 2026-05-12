@@ -83,7 +83,7 @@ public abstract class SyncPlatformGuideShardSubmodulesTask extends DefaultTask {
                 GitSupport.run(projectDirectory, "submodule", "update", "--init", project.submodulePath());
             }
             assertCleanSubmodule(project, submoduleDirectory);
-            GitSupport.run(submoduleDirectory, "fetch", "--tags", "origin");
+            GitSupport.run(submoduleDirectory, "fetch", "--tags", "--no-write-fetch-head", "origin");
             GitSupport.run(submoduleDirectory, "switch", "--detach", expectedTag);
         }
     }

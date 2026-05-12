@@ -79,7 +79,7 @@ public abstract class SyncPlatformProjectSubmodulesTask extends DefaultTask {
 
     private static void checkoutPlatformTag(Path projectDirectory, GuideProject project, Path submoduleDirectory, String expectedTag) throws IOException, InterruptedException {
         assertCleanSubmodule(project, submoduleDirectory);
-        GitSupport.run(submoduleDirectory, "fetch", "--tags", "origin");
+        GitSupport.run(submoduleDirectory, "fetch", "--tags", "--no-write-fetch-head", "origin");
         GitSupport.run(submoduleDirectory, "switch", "--detach", expectedTag);
         GitSupport.run(projectDirectory, "add", ".gitmodules", project.submodulePath());
     }

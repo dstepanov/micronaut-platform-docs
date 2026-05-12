@@ -53,6 +53,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final Pattern SCRIPT_TAG = Pattern.compile("<script\\b[^>]*>.*?</script>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern ID_ATTRIBUTE = Pattern.compile("\\bid\\s*=\\s*\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern URL_ATTRIBUTE = Pattern.compile("\\b(href|src)\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
+    private static final Pattern IMG_TAG = Pattern.compile("<img\\b[^>]*>", Pattern.CASE_INSENSITIVE);
     private static final Pattern SVG_TAG = Pattern.compile("<svg\\b([^>]*)>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_CLASS = Pattern.compile("\\bclass\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
 
@@ -120,6 +121,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         content = SCRIPT_TAG.matcher(content).replaceAll("");
         content = prefixIds(content, project.slug());
         content = rewriteUrls(content, project);
+        content = optimizeImages(content);
         return new GuideDocument(project, title, version, tocItems, content);
     }
 
@@ -350,6 +352,30 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
 
         Path resolved = Path.of("assets", project.slug(), "docs", "guide").resolve(path).normalize();
         return resolved.toString().replace('\\', '/') + suffix;
+    }
+
+    private static String optimizeImages(String html) {
+        Matcher matcher = IMG_TAG.matcher(html);
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            String tag = matcher.group();
+            String optimized = tag;
+            if (!hasAttribute(optimized, "loading")) {
+                optimized = optimized.replaceFirst("(?i)<img\\b", "<img loading=\"lazy\"");
+            }
+            if (!hasAttribute(optimized, "decoding")) {
+                optimized = optimized.replaceFirst("(?i)<img\\b", "<img decoding=\"async\"");
+            }
+            matcher.appendReplacement(result, Matcher.quoteReplacement(optimized));
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    private static boolean hasAttribute(String tag, String attribute) {
+        return Pattern.compile("\\b" + Pattern.quote(attribute) + "\\s*=", Pattern.CASE_INSENSITIVE)
+            .matcher(tag)
+            .find();
     }
 
     private static int firstSuffixIndex(String value) {
