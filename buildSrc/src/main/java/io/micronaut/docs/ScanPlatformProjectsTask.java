@@ -38,10 +38,11 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
     private static final Pattern VERSION_BRANCH = Pattern.compile("^(\\d+)\\.(\\d+)\\..*$");
     private static final String UNKNOWN_CREATED_AT = "9999-12-31T23:59:59Z";
     private static final Map<String, String> REPOSITORY_OVERRIDES = Map.of(
+        "mongo", "micronaut-mongodb",
         "oraclecloud", "micronaut-oracle-cloud",
         "serialization", "micronaut-serialization"
     );
-    private static final Set<String> EXCLUDED_PROJECT_KEYS = Set.of("guides");
+    private static final Set<String> EXCLUDED_PROJECT_KEYS = Set.of("crac", "guides");
     private static final Set<String> UPPERCASE_WORDS = Set.of(
         "acme",
         "aot",
@@ -364,6 +365,9 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
         }
         if ("picocli".equals(lower)) {
             return "Picocli";
+        }
+        if ("mongodb".equals(lower)) {
+            return "MongoDB";
         }
         return lower.substring(0, 1).toUpperCase(Locale.ROOT) + lower.substring(1);
     }

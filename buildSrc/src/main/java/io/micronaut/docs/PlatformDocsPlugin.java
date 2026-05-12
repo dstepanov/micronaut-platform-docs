@@ -34,6 +34,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.setGroup("documentation");
                 task.setDescription("Adds missing git submodules for Micronaut projects discovered from micronaut-platform.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
+                task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
                 task.dependsOn(scanPlatformProjects);
             }

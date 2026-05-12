@@ -14,3 +14,233 @@
 	path = repos/micronaut-platform
 	url = https://github.com/micronaut-projects/micronaut-platform.git
 	branch = 5.0.x
+[submodule "repos/micronaut-acme"]
+	path = repos/micronaut-acme
+	url = https://github.com/micronaut-projects/micronaut-acme.git
+	branch = 6.0.x
+[submodule "repos/micronaut-aot"]
+	path = repos/micronaut-aot
+	url = https://github.com/micronaut-projects/micronaut-aot.git
+	branch = 3.0.x
+[submodule "repos/micronaut-aws"]
+	path = repos/micronaut-aws
+	url = https://github.com/micronaut-projects/micronaut-aws.git
+	branch = 5.0.x
+[submodule "repos/micronaut-azure"]
+	path = repos/micronaut-azure
+	url = https://github.com/micronaut-projects/micronaut-azure.git
+	branch = 6.0.x
+[submodule "repos/micronaut-cache"]
+	path = repos/micronaut-cache
+	url = https://github.com/micronaut-projects/micronaut-cache.git
+	branch = 6.0.x
+[submodule "repos/micronaut-cassandra"]
+	path = repos/micronaut-cassandra
+	url = https://github.com/micronaut-projects/micronaut-cassandra.git
+	branch = 7.0.x
+[submodule "repos/micronaut-chatbots"]
+	path = repos/micronaut-chatbots
+	url = https://github.com/micronaut-projects/micronaut-chatbots.git
+	branch = 2.0.x
+[submodule "repos/micronaut-coherence"]
+	path = repos/micronaut-coherence
+	url = https://github.com/micronaut-projects/micronaut-coherence.git
+	branch = 6.0.x
+[submodule "repos/micronaut-control-panel"]
+	path = repos/micronaut-control-panel
+	url = https://github.com/micronaut-projects/micronaut-control-panel.git
+	branch = 2.0.x
+[submodule "repos/micronaut-discovery-client"]
+	path = repos/micronaut-discovery-client
+	url = https://github.com/micronaut-projects/micronaut-discovery-client.git
+	branch = 5.0.x
+[submodule "repos/micronaut-eclipsestore"]
+	path = repos/micronaut-eclipsestore
+	url = https://github.com/micronaut-projects/micronaut-eclipsestore.git
+	branch = 2.0.x
+[submodule "repos/micronaut-elasticsearch"]
+	path = repos/micronaut-elasticsearch
+	url = https://github.com/micronaut-projects/micronaut-elasticsearch.git
+	branch = 6.0.x
+[submodule "repos/micronaut-email"]
+	path = repos/micronaut-email
+	url = https://github.com/micronaut-projects/micronaut-email.git
+	branch = 3.0.x
+[submodule "repos/micronaut-flyway"]
+	path = repos/micronaut-flyway
+	url = https://github.com/micronaut-projects/micronaut-flyway.git
+	branch = 8.0.x
+[submodule "repos/micronaut-gcp"]
+	path = repos/micronaut-gcp
+	url = https://github.com/micronaut-projects/micronaut-gcp.git
+	branch = 6.0.x
+[submodule "repos/micronaut-grpc"]
+	path = repos/micronaut-grpc
+	url = https://github.com/micronaut-projects/micronaut-grpc.git
+	branch = 5.0.x
+[submodule "repos/micronaut-graal-languages"]
+	path = repos/micronaut-graal-languages
+	url = https://github.com/micronaut-projects/micronaut-graal-languages.git
+	branch = 2.0.x
+[submodule "repos/micronaut-graphql"]
+	path = repos/micronaut-graphql
+	url = https://github.com/micronaut-projects/micronaut-graphql.git
+	branch = 5.0.x
+[submodule "repos/micronaut-groovy"]
+	path = repos/micronaut-groovy
+	url = https://github.com/micronaut-projects/micronaut-groovy.git
+	branch = 5.0.x
+[submodule "repos/micronaut-guice"]
+	path = repos/micronaut-guice
+	url = https://github.com/micronaut-projects/micronaut-guice.git
+	branch = 2.0.x
+[submodule "repos/micronaut-hibernate-validator"]
+	path = repos/micronaut-hibernate-validator
+	url = https://github.com/micronaut-projects/micronaut-hibernate-validator.git
+	branch = 5.0.x
+[submodule "repos/micronaut-jms"]
+	path = repos/micronaut-jms
+	url = https://github.com/micronaut-projects/micronaut-jms.git
+	branch = 5.0.x
+[submodule "repos/micronaut-jmx"]
+	path = repos/micronaut-jmx
+	url = https://github.com/micronaut-projects/micronaut-jmx.git
+	branch = 5.0.x
+[submodule "repos/micronaut-json-schema"]
+	path = repos/micronaut-json-schema
+	url = https://github.com/micronaut-projects/micronaut-json-schema.git
+	branch = 2.0.x
+[submodule "repos/micronaut-jackson-xml"]
+	path = repos/micronaut-jackson-xml
+	url = https://github.com/micronaut-projects/micronaut-jackson-xml.git
+	branch = 5.0.x
+[submodule "repos/micronaut-jaxrs"]
+	path = repos/micronaut-jaxrs
+	url = https://github.com/micronaut-projects/micronaut-jaxrs.git
+	branch = 5.0.x
+[submodule "repos/micronaut-kafka"]
+	path = repos/micronaut-kafka
+	url = https://github.com/micronaut-projects/micronaut-kafka.git
+	branch = 6.0.x
+[submodule "repos/micronaut-kotlin"]
+	path = repos/micronaut-kotlin
+	url = https://github.com/micronaut-projects/micronaut-kotlin.git
+	branch = 5.0.x
+[submodule "repos/micronaut-kubernetes"]
+	path = repos/micronaut-kubernetes
+	url = https://github.com/micronaut-projects/micronaut-kubernetes.git
+	branch = 8.0.x
+[submodule "repos/micronaut-langchain4j"]
+	path = repos/micronaut-langchain4j
+	url = https://github.com/micronaut-projects/micronaut-langchain4j.git
+	branch = 2.0.x
+[submodule "repos/micronaut-liquibase"]
+	path = repos/micronaut-liquibase
+	url = https://github.com/micronaut-projects/micronaut-liquibase.git
+	branch = 7.0.x
+[submodule "repos/micronaut-logging"]
+	path = repos/micronaut-logging
+	url = https://github.com/micronaut-projects/micronaut-logging.git
+	branch = 2.0.x
+[submodule "repos/micronaut-mcp"]
+	path = repos/micronaut-mcp
+	url = https://github.com/micronaut-projects/micronaut-mcp.git
+	branch = 1.0.x
+[submodule "repos/micronaut-mqtt"]
+	path = repos/micronaut-mqtt
+	url = https://github.com/micronaut-projects/micronaut-mqtt.git
+	branch = 4.0.x
+[submodule "repos/micronaut-micrometer"]
+	path = repos/micronaut-micrometer
+	url = https://github.com/micronaut-projects/micronaut-micrometer.git
+	branch = 6.0.x
+[submodule "repos/micronaut-mongodb"]
+	path = repos/micronaut-mongodb
+	url = https://github.com/micronaut-projects/micronaut-mongodb.git
+[submodule "repos/micronaut-multitenancy"]
+	path = repos/micronaut-multitenancy
+	url = https://github.com/micronaut-projects/micronaut-multitenancy.git
+[submodule "repos/micronaut-nats"]
+	path = repos/micronaut-nats
+	url = https://github.com/micronaut-projects/micronaut-nats.git
+[submodule "repos/micronaut-neo4j"]
+	path = repos/micronaut-neo4j
+	url = https://github.com/micronaut-projects/micronaut-neo4j.git
+[submodule "repos/micronaut-object-storage"]
+	path = repos/micronaut-object-storage
+	url = https://github.com/micronaut-projects/micronaut-object-storage.git
+[submodule "repos/micronaut-openapi"]
+	path = repos/micronaut-openapi
+	url = https://github.com/micronaut-projects/micronaut-openapi.git
+[submodule "repos/micronaut-openrewrite"]
+	path = repos/micronaut-openrewrite
+	url = https://github.com/micronaut-projects/micronaut-openrewrite.git
+[submodule "repos/micronaut-opensearch"]
+	path = repos/micronaut-opensearch
+	url = https://github.com/micronaut-projects/micronaut-opensearch.git
+[submodule "repos/micronaut-oracle-cloud"]
+	path = repos/micronaut-oracle-cloud
+	url = https://github.com/micronaut-projects/micronaut-oracle-cloud.git
+[submodule "repos/micronaut-picocli"]
+	path = repos/micronaut-picocli
+	url = https://github.com/micronaut-projects/micronaut-picocli.git
+[submodule "repos/micronaut-problem-json"]
+	path = repos/micronaut-problem-json
+	url = https://github.com/micronaut-projects/micronaut-problem-json.git
+[submodule "repos/micronaut-pulsar"]
+	path = repos/micronaut-pulsar
+	url = https://github.com/micronaut-projects/micronaut-pulsar.git
+[submodule "repos/micronaut-r2dbc"]
+	path = repos/micronaut-r2dbc
+	url = https://github.com/micronaut-projects/micronaut-r2dbc.git
+[submodule "repos/micronaut-rss"]
+	path = repos/micronaut-rss
+	url = https://github.com/micronaut-projects/micronaut-rss.git
+[submodule "repos/micronaut-rabbitmq"]
+	path = repos/micronaut-rabbitmq
+	url = https://github.com/micronaut-projects/micronaut-rabbitmq.git
+[submodule "repos/micronaut-reactor"]
+	path = repos/micronaut-reactor
+	url = https://github.com/micronaut-projects/micronaut-reactor.git
+[submodule "repos/micronaut-redis"]
+	path = repos/micronaut-redis
+	url = https://github.com/micronaut-projects/micronaut-redis.git
+[submodule "repos/micronaut-rxjava3"]
+	path = repos/micronaut-rxjava3
+	url = https://github.com/micronaut-projects/micronaut-rxjava3.git
+[submodule "repos/micronaut-sql"]
+	path = repos/micronaut-sql
+	url = https://github.com/micronaut-projects/micronaut-sql.git
+[submodule "repos/micronaut-security"]
+	path = repos/micronaut-security
+	url = https://github.com/micronaut-projects/micronaut-security.git
+[submodule "repos/micronaut-servlet"]
+	path = repos/micronaut-servlet
+	url = https://github.com/micronaut-projects/micronaut-servlet.git
+[submodule "repos/micronaut-session"]
+	path = repos/micronaut-session
+	url = https://github.com/micronaut-projects/micronaut-session.git
+[submodule "repos/micronaut-sourcegen"]
+	path = repos/micronaut-sourcegen
+	url = https://github.com/micronaut-projects/micronaut-sourcegen.git
+[submodule "repos/micronaut-spring"]
+	path = repos/micronaut-spring
+	url = https://github.com/micronaut-projects/micronaut-spring.git
+[submodule "repos/micronaut-test"]
+	path = repos/micronaut-test
+	url = https://github.com/micronaut-projects/micronaut-test.git
+[submodule "repos/micronaut-test-resources"]
+	path = repos/micronaut-test-resources
+	url = https://github.com/micronaut-projects/micronaut-test-resources.git
+[submodule "repos/micronaut-toml"]
+	path = repos/micronaut-toml
+	url = https://github.com/micronaut-projects/micronaut-toml.git
+[submodule "repos/micronaut-tracing"]
+	path = repos/micronaut-tracing
+	url = https://github.com/micronaut-projects/micronaut-tracing.git
+[submodule "repos/micronaut-validation"]
+	path = repos/micronaut-validation
+	url = https://github.com/micronaut-projects/micronaut-validation.git
+[submodule "repos/micronaut-views"]
+	path = repos/micronaut-views
+	url = https://github.com/micronaut-projects/micronaut-views.git

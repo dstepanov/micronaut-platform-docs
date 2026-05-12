@@ -60,7 +60,7 @@ Run the workflow in this order from the repository root.
 
 This task reads `repos/micronaut-platform/gradle/libs.versions.toml`, discovers every Micronaut BOM project managed by the platform, resolves the matching GitHub repository, derives the documentation branch from the platform version, and writes `gradle/platform-doc-projects.properties`.
 
-`micronaut-guides` is intentionally excluded from aggregation because it is not one of the project guide sites rendered into this platform docs page.
+`micronaut-crac` and `micronaut-guides` are intentionally excluded from aggregation because they are not rendered into this platform docs page.
 
 Repository ordering is based on `repositoryCreatedAt`. The task first asks the GitHub API for repository creation dates. If a repository cannot be resolved remotely, it falls back to the oldest local git root commit when the submodule is present. If neither source is available, it writes `9999-12-31T23:59:59Z` as an unknown-date sentinel so unresolved projects sort last.
 
@@ -70,7 +70,7 @@ Repository ordering is based on `repositoryCreatedAt`. The task first asks the G
 ./gradlew -q syncPlatformProjectSubmodules
 ```
 
-This task reads the generated manifest and runs `git submodule add -b <branch> <repositoryUrl> <submodulePath>` for projects that are not already present under `repos/`.
+This task reads the generated manifest, adds projects that are not already present under `repos/`, fetches tags in each submodule, and checks out the platform-managed `v<version>` tag. New submodule pointers are staged in the root repository.
 
 3. Align every documentation submodule to the platform version set.
 
@@ -133,7 +133,7 @@ build/site/index.html
 | Task | Purpose | Mutates files |
 | --- | --- | --- |
 | `scanPlatformProjects` | Scans the platform catalog and writes the generated project manifest. | `gradle/platform-doc-projects.properties` |
-| `syncPlatformProjectSubmodules` | Adds missing Micronaut project submodules from the manifest. | `.gitmodules`, `repos/*` |
+| `syncPlatformProjectSubmodules` | Adds missing Micronaut project submodules and checks out platform-managed tags. | `.gitmodules`, `repos/*` |
 | `alignPlatformVersions` | Checks out each project submodule at the platform-managed release tag. | `repos/*` git state |
 | `verifyPlatformAlignment` | Verifies submodule HEAD tags match platform-managed versions. | No |
 | `buildPlatformGuideDocs` | Runs each submodule's `docs` task with Java 25. | `repos/*/build/docs` |
