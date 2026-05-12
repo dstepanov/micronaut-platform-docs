@@ -1,0 +1,641 @@
+package io.micronaut.docs;
+
+import com.github.jknack.handlebars.Handlebars;
+import com.github.jknack.handlebars.Template;
+import com.github.jknack.handlebars.cache.ConcurrentMapTemplateCache;
+import com.github.jknack.handlebars.io.ClassPathTemplateLoader;
+
+import org.gradle.api.DefaultTask;
+import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.TaskAction;
+import org.yaml.snakeyaml.Yaml;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.jar.JarInputStream;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public abstract class GeneratePlatformDocsTask extends DefaultTask {
+    private static final String TEMPLATE_ROOT = "/io/micronaut/docs/templates";
+    private static final String SITE_ASSET_PATH = "platform-assets";
+    private static final String GUIDE_THEME_ASSET_PATH = "guide-assets";
+    private static final String GUIDE_THEME_RESOURCE = "grails-doc-files.jar";
+    private static final String SITE_CSS_RESOURCE = "/io/micronaut/docs/assets/site.css";
+    private static final String LOGO_BLACK_RESOURCE = "/io/micronaut/docs/assets/logos/micronaut-horizontal-black.svg";
+    private static final String LOGO_WHITE_RESOURCE = "/io/micronaut/docs/assets/logos/micronaut-horizontal-white.svg";
+    private static final String LUCIDE_PROPERTIES_RESOURCE = "META-INF/maven/org.webjars.npm/lucide-static/pom.properties";
+    private static final String LUCIDE_ICON_ROOT = "META-INF/resources/webjars/lucide-static/%s/icons/";
+    private static final Set<String> GUIDE_THEME_DIRECTORIES = Set.of("css/", "fonts/", "img/default/", "js/", "style/");
+    private static final Set<String> GENERATED_DOC_THEME_DIRECTORIES = Set.of("css/", "fonts/", "js/", "style/");
+    private static final Pattern TITLE = Pattern.compile("<title>(.*?)</title>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern VERSION = Pattern.compile("<strong>\\s*Version:\\s*</strong>\\s*([^<\\r\\n]+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DIV_TAG = Pattern.compile("<(/?)div\\b[^>]*>", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SCRIPT_TAG = Pattern.compile("<script\\b[^>]*>.*?</script>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern ID_ATTRIBUTE = Pattern.compile("\\bid\\s*=\\s*\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
+    private static final Pattern URL_ATTRIBUTE = Pattern.compile("\\b(href|src)\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SVG_TAG = Pattern.compile("<svg\\b([^>]*)>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern SVG_CLASS = Pattern.compile("\\bclass\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
+
+    @Internal
+    public abstract DirectoryProperty getProjectDirectory();
+
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getPlatformVersionCatalog();
+
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getProjectManifest();
+
+    @OutputDirectory
+    public abstract DirectoryProperty getOutputDirectory();
+
+    @TaskAction
+    public void generate() throws IOException, InterruptedException {
+        Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
+        Path outputDirectory = getOutputDirectory().get().getAsFile().toPath();
+        List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
+        getLogger().quiet("Generating platform docs site for {} projects at {}.", projects.size(), outputDirectory);
+
+        getLogger().quiet("Cleaning output directory: {}", outputDirectory);
+        deleteDirectory(outputDirectory);
+        Files.createDirectories(outputDirectory);
+
+        Map<String, String> platformVersions = PlatformVersions.read(getPlatformVersionCatalog().get().getAsFile().toPath());
+        getLogger().quiet("Copying shared Micronaut guide theme assets.");
+        copyGuideThemeAssets(outputDirectory);
+        List<GuideDocument> documents = new ArrayList<>();
+        int index = 0;
+        for (GuideProject project : projects) {
+            Path guideHtml = projectDirectory.resolve(project.guideIndexPath());
+            if (!Files.isRegularFile(guideHtml)) {
+                throw new IOException("Missing generated guide HTML for " + project.displayName() + ": " + guideHtml
+                    + ". Run ./gradlew -q buildPlatformGuideDocs first.");
+            }
+            getLogger().quiet("[{}/{}] Reading and copying {}.", ++index, projects.size(), project.displayName());
+            copyGeneratedDocs(projectDirectory, outputDirectory, project);
+            String html = Files.readString(guideHtml, StandardCharsets.UTF_8);
+            documents.add(parseGuide(project, html, projectDirectory.resolve(project.tocPath()), platformVersions.get(project.platformVersionKey())));
+        }
+
+        getLogger().quiet("Writing platform UI assets.");
+        writeSiteAssets(outputDirectory, documents);
+        Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents)), StandardCharsets.UTF_8);
+        getLogger().quiet("Generated platform docs site: {}", outputDirectory.resolve("index.html"));
+    }
+
+    private static GuideDocument parseGuide(GuideProject project, String html, Path tocFile, String platformVersion) throws IOException {
+        String title = firstMatch(TITLE, html)
+            .map(GeneratePlatformDocsTask::stripTags)
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .orElse(project.displayName());
+        String generatedVersion = firstMatch(VERSION, html)
+            .map(GeneratePlatformDocsTask::stripTags)
+            .map(String::trim)
+            .orElse("");
+        String version = platformVersion == null || platformVersion.isBlank() ? generatedVersion : platformVersion;
+        List<TocItem> tocItems = readTocItems(project, tocFile);
+        String content = extractDocsContent(html);
+        content = SCRIPT_TAG.matcher(content).replaceAll("");
+        content = prefixIds(content, project.slug());
+        content = rewriteUrls(content, project);
+        return new GuideDocument(project, title, version, tocItems, content);
+    }
+
+    private static void copyGeneratedDocs(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {
+        Path sourceDirectory = projectDirectory.resolve(project.generatedDocsPath());
+        if (!Files.isDirectory(sourceDirectory)) {
+            throw new IOException("Missing generated docs directory for " + project.displayName() + ": " + sourceDirectory);
+        }
+
+        Path targetDirectory = outputDirectory.resolve("assets").resolve(project.slug()).resolve("docs");
+        copyDirectory(sourceDirectory, targetDirectory);
+    }
+
+    private static void copyGuideThemeAssets(Path outputDirectory) throws IOException {
+        Path targetDirectory = outputDirectory.resolve(GUIDE_THEME_ASSET_PATH);
+        Files.createDirectories(targetDirectory);
+        try (InputStream input = GeneratePlatformDocsTask.class.getClassLoader().getResourceAsStream(GUIDE_THEME_RESOURCE)) {
+            if (input == null) {
+                throw new IOException("Missing Micronaut guide resource " + GUIDE_THEME_RESOURCE
+                    + ". The buildSrc classpath must contain io.micronaut.build.internal:micronaut-gradle-plugins.");
+            }
+            try (JarInputStream jar = new JarInputStream(input)) {
+                var entry = jar.getNextJarEntry();
+                while (entry != null) {
+                    String name = entry.getName();
+                    if (!entry.isDirectory() && isGuideThemeAsset(name)) {
+                        Path target = targetDirectory.resolve(name).normalize();
+                        if (!target.startsWith(targetDirectory)) {
+                            throw new IOException("Refusing to copy guide theme asset outside target directory: " + name);
+                        }
+                        Files.createDirectories(target.getParent());
+                        Files.copy(jar, target, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    entry = jar.getNextJarEntry();
+                }
+            }
+        }
+    }
+
+    private static boolean isGuideThemeAsset(String relativePath) {
+        String normalized = relativePath.replace('\\', '/');
+        return GUIDE_THEME_DIRECTORIES.stream().anyMatch(normalized::startsWith)
+            || normalized.equals("img/micronaut-logo-white.svg")
+            || normalized.equals("img/note.gif")
+            || normalized.equals("img/warning.gif");
+    }
+
+    private static void copyDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
+        try (var stream = Files.walk(sourceDirectory)) {
+            for (Path source : stream.toList()) {
+                String relativePath = sourceDirectory.relativize(source).toString().replace('\\', '/');
+                if (isGeneratedDocsThemeAsset(relativePath)) {
+                    continue;
+                }
+                Path target = targetDirectory.resolve(relativePath);
+                if (Files.isDirectory(source)) {
+                    Files.createDirectories(target);
+                } else {
+                    Files.createDirectories(target.getParent());
+                    Files.copy(source, target);
+                }
+            }
+        }
+    }
+
+    private static boolean isGeneratedDocsThemeAsset(String relativePath) {
+        return GENERATED_DOC_THEME_DIRECTORIES.stream().anyMatch(relativePath::startsWith)
+            || relativePath.equals("img/micronaut-logo-white.svg")
+            || relativePath.equals("img/note.gif")
+            || relativePath.equals("img/warning.gif")
+            || relativePath.startsWith("img/default/");
+    }
+
+    private static void deleteDirectory(Path directory) throws IOException {
+        if (!Files.exists(directory)) {
+            return;
+        }
+        try (var stream = Files.walk(directory)) {
+            for (Path path : stream.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
+            }
+        }
+    }
+
+    private static Optional<String> firstMatch(Pattern pattern, String html) {
+        Matcher matcher = pattern.matcher(html);
+        if (matcher.find()) {
+            return Optional.of(matcher.group(1));
+        }
+        return Optional.empty();
+    }
+
+    private static List<TocItem> readTocItems(GuideProject project, Path tocFile) throws IOException {
+        if (!Files.isRegularFile(tocFile)) {
+            throw new IOException("Missing TOC YAML for " + project.displayName() + ": " + tocFile);
+        }
+        Object parsed;
+        try (InputStream input = Files.newInputStream(tocFile)) {
+            parsed = new Yaml().load(input);
+        }
+        if (!(parsed instanceof Map<?, ?> toc)) {
+            throw new IOException("TOC YAML for " + project.displayName() + " must be a map: " + tocFile);
+        }
+        List<TocItem> items = new ArrayList<>();
+        appendTocItems(project, items, toc, 0, "");
+        return items;
+    }
+
+    private static void appendTocItems(GuideProject project, List<TocItem> items, Map<?, ?> toc, int level, String numberPrefix) {
+        int index = 1;
+        for (Map.Entry<?, ?> entry : toc.entrySet()) {
+            String id = tocKey(entry.getKey());
+            if ("title".equals(id)) {
+                continue;
+            }
+            String number = numberPrefix.isBlank() ? Integer.toString(index) : numberPrefix + "." + index;
+            Object value = entry.getValue();
+            items.add(new TocItem(level, escapeHtml(number), escapeHtml(tocTitle(project, id, value)), id, project.slug() + "-" + id));
+            if (value instanceof Map<?, ?> children) {
+                appendTocItems(project, items, children, level + 1, number);
+            }
+            index++;
+        }
+    }
+
+    private static String tocKey(Object key) {
+        if (key instanceof String id && !id.isBlank()) {
+            return id;
+        }
+        throw new IllegalArgumentException("TOC section keys must be non-blank strings.");
+    }
+
+    private static String tocTitle(GuideProject project, String id, Object value) {
+        if (value instanceof String title && !title.isBlank()) {
+            return title.trim();
+        }
+        if (value instanceof Map<?, ?> children) {
+            Object title = children.get("title");
+            if (title instanceof String text && !text.isBlank()) {
+                return text.trim();
+            }
+            throw new IllegalArgumentException("TOC section '" + id + "' for " + project.displayName() + " must define a non-blank title.");
+        }
+        throw new IllegalArgumentException("TOC section '" + id + "' for " + project.displayName() + " must be a string or map.");
+    }
+
+    private static String extractDocsContent(String html) {
+        int start = html.indexOf("<div class=\"docs-content\"");
+        if (start < 0) {
+            throw new IllegalArgumentException("Guide HTML does not contain <div class=\"docs-content\">.");
+        }
+
+        int openingEnd = html.indexOf('>', start);
+        if (openingEnd < 0) {
+            throw new IllegalArgumentException("Guide HTML contains an unterminated docs-content div.");
+        }
+
+        int closingStart = findMatchingDivEnd(html, start);
+        return html.substring(openingEnd + 1, closingStart).trim();
+    }
+
+    private static int findMatchingDivEnd(String html, int start) {
+        Matcher matcher = DIV_TAG.matcher(html);
+        matcher.region(start, html.length());
+        int depth = 0;
+        while (matcher.find()) {
+            if (matcher.group(1).isEmpty()) {
+                depth++;
+            } else {
+                depth--;
+                if (depth == 0) {
+                    return matcher.start();
+                }
+            }
+        }
+        throw new IllegalArgumentException("Guide HTML contains an unterminated docs-content div.");
+    }
+
+    private static String prefixIds(String html, String slug) {
+        Matcher matcher = ID_ATTRIBUTE.matcher(html);
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            String id = matcher.group(1);
+            matcher.appendReplacement(result, Matcher.quoteReplacement("id=\"" + slug + "-" + id + "\""));
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    private static String rewriteUrls(String html, GuideProject project) {
+        Matcher matcher = URL_ATTRIBUTE.matcher(html);
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            String attribute = matcher.group(1);
+            String value = matcher.group(2);
+            String rewritten = rewriteUrl(value, project);
+            matcher.appendReplacement(result, Matcher.quoteReplacement(attribute + "=\"" + escapeAttribute(rewritten) + "\""));
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    private static String rewriteUrl(String value, GuideProject project) {
+        if (value.isBlank()) {
+            return value;
+        }
+        if (value.startsWith("#")) {
+            return "#" + project.slug() + "-" + value.substring(1);
+        }
+
+        String lower = value.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("http:")
+            || lower.startsWith("https:")
+            || lower.startsWith("mailto:")
+            || lower.startsWith("javascript:")
+            || lower.startsWith("data:")
+            || value.startsWith("//")) {
+            return value;
+        }
+
+        String path = value;
+        String suffix = "";
+        int queryIndex = firstSuffixIndex(value);
+        if (queryIndex >= 0) {
+            path = value.substring(0, queryIndex);
+            suffix = value.substring(queryIndex);
+        }
+
+        Path resolved = Path.of("assets", project.slug(), "docs", "guide").resolve(path).normalize();
+        return resolved.toString().replace('\\', '/') + suffix;
+    }
+
+    private static int firstSuffixIndex(String value) {
+        int queryIndex = value.indexOf('?');
+        int hashIndex = value.indexOf('#');
+        if (queryIndex < 0) {
+            return hashIndex;
+        }
+        if (hashIndex < 0) {
+            return queryIndex;
+        }
+        return Math.min(queryIndex, hashIndex);
+    }
+
+    private static void writeSiteAssets(Path outputDirectory, List<GuideDocument> documents) throws IOException {
+        Path siteAssets = outputDirectory.resolve(SITE_ASSET_PATH);
+        Files.createDirectories(siteAssets);
+        Files.writeString(siteAssets.resolve("site.css"), resourceText(SITE_CSS_RESOURCE), StandardCharsets.UTF_8);
+        Files.writeString(siteAssets.resolve("site.js"), renderTemplate("assets/site.js", scriptModel(documents)), StandardCharsets.UTF_8);
+        copyResource(LOGO_BLACK_RESOURCE, siteAssets.resolve("logos/micronaut-horizontal-black.svg"));
+        copyResource(LOGO_WHITE_RESOURCE, siteAssets.resolve("logos/micronaut-horizontal-white.svg"));
+    }
+
+    private static String renderTemplate(String templateName, Map<String, Object> model) throws IOException {
+        Handlebars handlebars = new Handlebars(new ClassPathTemplateLoader(TEMPLATE_ROOT, ".hbs"))
+            .infiniteLoops(true)
+            .with(new ConcurrentMapTemplateCache());
+        Template template = handlebars.compile(templateName);
+        return template.apply(model);
+    }
+
+    private static String resourceText(String resourcePath) throws IOException {
+        try (InputStream input = GeneratePlatformDocsTask.class.getResourceAsStream(resourcePath)) {
+            if (input == null) {
+                throw new IOException("Missing classpath resource: " + resourcePath);
+            }
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static void copyResource(String resourcePath, Path target) throws IOException {
+        try (InputStream input = GeneratePlatformDocsTask.class.getResourceAsStream(resourcePath)) {
+            if (input == null) {
+                throw new IOException("Missing classpath resource: " + resourcePath);
+            }
+            Files.createDirectories(target.getParent());
+            Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static Map<String, Object> siteModel(Path projectDirectory, List<GuideDocument> documents) throws IOException, InterruptedException {
+        String defaultProject = documents.get(0).project().slug();
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("assetPath", SITE_ASSET_PATH);
+        model.put("guideAssetPath", GUIDE_THEME_ASSET_PATH);
+        model.put("defaultProject", defaultProject);
+        model.put("platform", platformModel(projectDirectory));
+        model.put("icons", iconModel());
+        model.put("documents", documentModels(documents));
+        return model;
+    }
+
+    private static Map<String, Object> platformModel(Path projectDirectory) throws IOException, InterruptedException {
+        Path platformDirectory = projectDirectory.resolve("repos/micronaut-platform");
+        Map<String, String> properties = readProperties(platformDirectory.resolve("gradle.properties"));
+        String version = properties.getOrDefault("projectVersion", "");
+        String branch = GitSupport.run(platformDirectory, "branch", "--show-current").trim();
+        if (branch.isBlank()) {
+            branch = "detached";
+        }
+        String revision = GitSupport.run(platformDirectory, "describe", "--tags", "--always", "--dirty").trim();
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("name", "Micronaut Platform");
+        model.put("version", version);
+        model.put("displayVersion", version.isBlank() ? branch : version);
+        model.put("branch", branch);
+        model.put("revision", revision);
+        return model;
+    }
+
+    private static Map<String, String> readProperties(Path file) throws IOException {
+        List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+        Map<String, String> properties = new LinkedHashMap<>();
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isBlank() || trimmed.startsWith("#")) {
+                continue;
+            }
+            int equalsIndex = trimmed.indexOf('=');
+            if (equalsIndex < 1) {
+                continue;
+            }
+            properties.put(trimmed.substring(0, equalsIndex).trim(), trimmed.substring(equalsIndex + 1).trim());
+        }
+        return properties;
+    }
+
+    private static Map<String, String> iconModel() throws IOException {
+        Map<String, String> icons = new LinkedHashMap<>();
+        icons.put("bookOpen", lucideIcon("book-open", "project-icon"));
+        icons.put("externalLink", lucideIcon("external-link", "badge-icon"));
+        icons.put("github", lucideIcon("github", "badge-icon"));
+        icons.put("gitBranch", lucideIcon("git-branch", "badge-icon"));
+        icons.put("menu", lucideIcon("menu", "trigger-icon"));
+        icons.put("moon", lucideIcon("moon", "theme-icon-svg"));
+        icons.put("panelLeft", lucideIcon("panel-left", "trigger-icon"));
+        icons.put("sun", lucideIcon("sun", "theme-icon-svg"));
+        return icons;
+    }
+
+    private static String lucideIcon(String name, String extraClass) throws IOException {
+        String version = lucideVersion();
+        String resource = LUCIDE_ICON_ROOT.formatted(version) + name + ".svg";
+        String svg = classLoaderResourceText(resource)
+            .replaceFirst("(?s)^\\s*<!--.*?-->\\s*", "")
+            .trim();
+        Matcher matcher = SVG_TAG.matcher(svg);
+        if (!matcher.find()) {
+            throw new IOException("Lucide icon does not contain an svg element: " + resource);
+        }
+        String attributes = matcher.group(1);
+        Matcher classMatcher = SVG_CLASS.matcher(attributes);
+        String replacement;
+        if (classMatcher.find()) {
+            String classes = (extraClass + " " + classMatcher.group(1)).trim();
+            String updatedAttributes = classMatcher.replaceFirst(Matcher.quoteReplacement("class=\"" + classes + "\""));
+            replacement = "<svg" + updatedAttributes + " aria-hidden=\"true\" focusable=\"false\">";
+        } else {
+            replacement = "<svg class=\"" + extraClass + "\"" + attributes + " aria-hidden=\"true\" focusable=\"false\">";
+        }
+        return matcher.replaceFirst(Matcher.quoteReplacement(replacement));
+    }
+
+    private static String lucideVersion() throws IOException {
+        try (InputStream input = GeneratePlatformDocsTask.class.getClassLoader().getResourceAsStream(LUCIDE_PROPERTIES_RESOURCE)) {
+            if (input == null) {
+                throw new IOException("Missing Lucide WebJar metadata: " + LUCIDE_PROPERTIES_RESOURCE);
+            }
+            Properties properties = new Properties();
+            properties.load(input);
+            String version = properties.getProperty("version");
+            if (version == null || version.isBlank()) {
+                throw new IOException("Lucide WebJar metadata does not define a version.");
+            }
+            return version;
+        }
+    }
+
+    private static String classLoaderResourceText(String resourcePath) throws IOException {
+        try (InputStream input = GeneratePlatformDocsTask.class.getClassLoader().getResourceAsStream(resourcePath)) {
+            if (input == null) {
+                throw new IOException("Missing classpath resource: " + resourcePath);
+            }
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static Map<String, Object> scriptModel(List<GuideDocument> documents) {
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("firstSections", firstSectionModels(documents));
+        return model;
+    }
+
+    private static List<Map<String, Object>> documentModels(List<GuideDocument> documents) {
+        List<Map<String, Object>> models = new ArrayList<>();
+        for (int i = 0; i < documents.size(); i++) {
+            models.add(documentModel(documents.get(i), i == 0));
+        }
+        return models;
+    }
+
+    private static Map<String, Object> documentModel(GuideDocument document, boolean selected) {
+        GuideProject project = document.project();
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("slug", project.slug());
+        model.put("displayName", project.displayName());
+        model.put("publishedGuideUrl", project.publishedGuideUrl());
+        model.put("repositoryUrl", project.repositoryUrl());
+        model.put("branch", project.branch());
+        model.put("title", document.title());
+        model.put("version", document.version());
+        model.put("toc", tocNodeModels(buildTocTree(document.tocItems())));
+        model.put("contentHtml", document.contentHtml());
+        model.put("selected", selected);
+        return model;
+    }
+
+    private static List<Map<String, Object>> firstSectionModels(List<GuideDocument> documents) {
+        List<Map<String, Object>> models = new ArrayList<>();
+        for (GuideDocument document : documents) {
+            Map<String, Object> model = new LinkedHashMap<>();
+            model.put("project", escapeJavaScript(document.project().slug()));
+            model.put("section", escapeJavaScript(firstFragment(document)));
+            models.add(model);
+        }
+        return models;
+    }
+
+    private static List<Map<String, Object>> tocNodeModels(List<TocNode> nodes) {
+        List<Map<String, Object>> models = new ArrayList<>();
+        for (TocNode node : nodes) {
+            models.add(tocNodeModel(node));
+        }
+        return models;
+    }
+
+    private static Map<String, Object> tocNodeModel(TocNode node) {
+        TocItem item = node.item();
+        List<Map<String, Object>> children = tocNodeModels(node.children());
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("prefixedId", item.prefixedId());
+        model.put("numberHtml", item.numberHtml());
+        model.put("titleHtml", item.titleHtml());
+        model.put("children", children);
+        model.put("hasChildren", !children.isEmpty());
+        return model;
+    }
+
+    private static List<TocNode> buildTocTree(List<TocItem> items) {
+        List<TocNode> roots = new ArrayList<>();
+        List<TocNode> parents = new ArrayList<>();
+        for (TocItem item : items) {
+            TocNode node = new TocNode(item);
+            int level = Math.max(0, item.level());
+            while (parents.size() <= level) {
+                parents.add(null);
+            }
+            parents.set(level, node);
+            while (parents.size() > level + 1) {
+                parents.remove(parents.size() - 1);
+            }
+
+            if (level == 0 || parents.get(level - 1) == null) {
+                roots.add(node);
+            } else {
+                parents.get(level - 1).children().add(node);
+            }
+        }
+        return roots;
+    }
+
+    private static String firstFragment(GuideDocument document) {
+        if (document.tocItems().isEmpty()) {
+            return document.project().slug();
+        }
+        return document.tocItems().get(0).prefixedId();
+    }
+
+    private static String stripTags(String value) {
+        return value.replaceAll("<[^>]+>", "");
+    }
+
+    private static String escapeHtml(String value) {
+        return value
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;");
+    }
+
+    private static String escapeAttribute(String value) {
+        return escapeHtml(value).replace("\"", "&quot;");
+    }
+
+    private static String escapeJavaScript(String value) {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "");
+    }
+
+    private record GuideDocument(
+        GuideProject project,
+        String title,
+        String version,
+        List<TocItem> tocItems,
+        String contentHtml
+    ) {
+    }
+
+    private record TocItem(int level, String numberHtml, String titleHtml, String originalId, String prefixedId) {
+    }
+
+    private record TocNode(TocItem item, List<TocNode> children) {
+        TocNode(TocItem item) {
+            this(item, new ArrayList<>());
+        }
+    }
+}

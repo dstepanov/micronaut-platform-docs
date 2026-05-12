@@ -1,0 +1,11 @@
+[versions]
+handlebars = "4.5.0"
+micronaut-build = "8.0.0-M18"
+lucide-static = "0.562.0"
+snakeyaml = "2.6"
+
+[libraries]
+handlebars = { module = "com.github.jknack:handlebars", version.ref = "handlebars" }
+lucide-static = { module = "org.webjars.npm:lucide-static", version.ref = "lucide-static" }
+micronaut-gradle-plugins = { module = "io.micronaut.build.internal:micronaut-gradle-plugins", version.ref = "micronaut-build" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }

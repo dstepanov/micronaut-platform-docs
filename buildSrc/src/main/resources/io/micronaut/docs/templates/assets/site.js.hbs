@@ -1,0 +1,262 @@
+const firstSections = {
+{{#each firstSections}}
+    "{{{project}}}": "{{{section}}}"{{#unless @last}},{{/unless}}
+{{/each}}
+};
+const projectOptions = Array.from(document.querySelectorAll("[data-project-option]"));
+const sidebarCollapse = document.querySelector(".sidebar-collapse");
+const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-label]");
+const sidebarToggle = document.querySelector(".sidebar-toggle");
+const sidebarContent = document.querySelector(".sidebar-content");
+const themeSwitcher = document.querySelector("[data-theme-switcher]");
+const projectDocuments = Array.from(document.querySelectorAll("[data-project]"));
+const projectSections = Array.from(document.querySelectorAll("[data-project-nav]"));
+const themeStorageKey = "theme";
+const headingCache = new Map();
+let activeSectionId = "";
+let scrollSpyFrame = 0;
+
+function copyText(element) {
+    let range;
+    let selection;
+
+    if (document.body.createTextRange) {
+        range = document.body.createTextRange();
+        range.moveToElementText(element);
+        range.select();
+    } else if (window.getSelection) {
+        selection = window.getSelection();
+        range = document.createRange();
+        range.selectNodeContents(element);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
+    document.execCommand("copy");
+}
+
+window.copyToClipboard = function copyToClipboard(element) {
+    const source = element.parentNode?.previousElementSibling;
+    if (source) {
+        copyText(source);
+    }
+};
+
+function storedTheme() {
+    try {
+        if (window.localStorage) {
+            return localStorage.getItem(themeStorageKey);
+        }
+    } catch (e) {
+        return null;
+    }
+    return null;
+}
+
+function preferredTheme() {
+    const theme = storedTheme();
+    if (theme === "dark" || theme === "light") {
+        return theme;
+    }
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        return "dark";
+    }
+    return "light";
+}
+
+function applyTheme(theme, persist) {
+    const dark = theme === "dark";
+    document.body.classList.toggle("dark-mode", dark);
+    if (themeSwitcher) {
+        const label = dark ? "Switch to light theme" : "Switch to dark theme";
+        themeSwitcher.setAttribute("aria-label", label);
+        themeSwitcher.setAttribute("aria-pressed", String(dark));
+        themeSwitcher.setAttribute("title", label);
+    }
+    try {
+        if (persist && window.localStorage) {
+            localStorage.setItem(themeStorageKey, dark ? "dark" : "light");
+        }
+    } catch (e) {
+        return;
+    }
+}
+
+function switchTheme(persist) {
+    applyTheme(document.body.classList.contains("dark-mode") ? "light" : "dark", persist);
+}
+
+window.switchTheme = switchTheme;
+
+function projectFromHash() {
+    const hash = decodeURIComponent(window.location.hash.slice(1));
+    return Object.keys(firstSections).find((project) => hash.startsWith(project + "-"));
+}
+
+function projectDocument(project) {
+    return projectDocuments.find((element) => element.dataset.project === project);
+}
+
+function sectionHeadings(project) {
+    if (!headingCache.has(project)) {
+        const article = projectDocument(project);
+        const headings = Array.from(article?.querySelectorAll("h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]") ?? [])
+            .filter((heading) => document.querySelector(".toc a[data-section='" + CSS.escape(heading.id) + "']"));
+        headingCache.set(project, headings);
+    }
+    return headingCache.get(project);
+}
+
+function activeSectionFromScroll() {
+    const project = document.body.dataset.project;
+    const headings = sectionHeadings(project);
+    const topbarHeight = document.querySelector(".topbar")?.getBoundingClientRect().height ?? 0;
+    const activationTop = topbarHeight + 24;
+    let activeId = firstSections[project];
+    for (const heading of headings) {
+        if (heading.getBoundingClientRect().top <= activationTop) {
+            activeId = heading.id;
+        } else {
+            break;
+        }
+    }
+    return activeId;
+}
+
+function queueScrollSpy() {
+    if (scrollSpyFrame) {
+        return;
+    }
+    scrollSpyFrame = window.requestAnimationFrame(() => {
+        scrollSpyFrame = 0;
+        const nextActiveSectionId = activeSectionFromScroll();
+        if (nextActiveSectionId && nextActiveSectionId !== activeSectionId) {
+            refreshActiveLink(nextActiveSectionId);
+        }
+    });
+}
+
+function scrollProjectSubmenu(section) {
+    const submenu = section?.querySelector(".toc-tree");
+    if (!sidebarContent || !submenu) {
+        return;
+    }
+    window.requestAnimationFrame(() => {
+        const top = submenu.getBoundingClientRect().top - sidebarContent.getBoundingClientRect().top + sidebarContent.scrollTop;
+        sidebarContent.scrollTo({
+            top: Math.max(0, top),
+            behavior: "smooth"
+        });
+    });
+}
+
+function setProject(project, updateHash, scrollSubmenu) {
+    if (!firstSections[project]) {
+        project = Object.keys(firstSections)[0];
+    }
+    const previousProject = document.body.dataset.project;
+    let activeSection;
+    document.body.dataset.project = project;
+    projectDocuments.forEach((element) => {
+        element.hidden = element.dataset.project !== project;
+    });
+    projectSections.forEach((section) => {
+        const active = section.dataset.projectNav === project;
+        section.classList.toggle("active", active);
+        section.open = active;
+        section.querySelector("[data-project-option]").setAttribute("aria-current", String(active));
+        if (active) {
+            activeSection = section;
+        }
+    });
+    if (updateHash && !projectFromHash()) {
+        history.replaceState(null, "", "#" + firstSections[project]);
+    }
+    refreshActiveLink();
+    queueScrollSpy();
+    if (scrollSubmenu && project !== previousProject) {
+        scrollProjectSubmenu(activeSection);
+    }
+}
+
+function refreshActiveLink(nextActiveSectionId) {
+    const activeId = nextActiveSectionId || decodeURIComponent(window.location.hash.slice(1));
+    document.querySelectorAll(".toc a.active").forEach((link) => link.classList.remove("active"));
+    if (!activeId) {
+        return;
+    }
+    const activeLink = document.querySelector(".toc a[href='#" + CSS.escape(activeId) + "']");
+    if (activeLink) {
+        activeLink.classList.add("active");
+        activeSectionId = activeId;
+        let parent = activeLink.parentElement;
+        while (parent) {
+            if (parent.tagName === "DETAILS") {
+                parent.open = true;
+            }
+            parent = parent.parentElement;
+        }
+    }
+}
+
+projectOptions.forEach((summary) => {
+    summary.addEventListener("click", (event) => {
+        event.preventDefault();
+        const section = summary.closest("[data-project-nav]");
+        if (section.open && document.body.dataset.project === section.dataset.projectNav) {
+            section.open = false;
+            return;
+        }
+        const project = section.dataset.projectNav;
+        history.replaceState(null, "", "#" + firstSections[project]);
+        setProject(project, false, true);
+    });
+});
+
+document.addEventListener("click", (event) => {
+    const summaryLink = event.target.closest("summary a");
+    if (summaryLink) {
+        event.stopPropagation();
+    }
+    const hashLink = event.target.closest("a[href^='#']");
+    if (!hashLink) {
+        return;
+    }
+    const targetProject = Object.keys(firstSections).find((project) => {
+        return hashLink.hash.slice(1).startsWith(project + "-");
+    });
+    if (targetProject) {
+        setProject(targetProject, false, targetProject !== document.body.dataset.project);
+        document.body.classList.remove("sidebar-open");
+        sidebarToggle.setAttribute("aria-expanded", "false");
+        window.setTimeout(queueScrollSpy, 0);
+    }
+});
+
+sidebarToggle.addEventListener("click", () => {
+    const open = !document.body.classList.contains("sidebar-open");
+    document.body.classList.toggle("sidebar-open", open);
+    sidebarToggle.setAttribute("aria-expanded", String(open));
+});
+
+sidebarCollapse.addEventListener("click", () => {
+    const collapsed = !document.body.classList.contains("sidebar-collapsed");
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    sidebarCollapse.setAttribute("aria-expanded", String(!collapsed));
+    const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+    sidebarCollapse.setAttribute("aria-label", label);
+    sidebarCollapse.setAttribute("title", label);
+    sidebarCollapseLabel.textContent = label;
+});
+
+themeSwitcher?.addEventListener("click", () => switchTheme(true));
+
+window.addEventListener("hashchange", () => {
+    setProject(projectFromHash() || document.body.dataset.project, false);
+});
+window.addEventListener("scroll", queueScrollSpy, { passive: true });
+window.addEventListener("resize", queueScrollSpy);
+
+applyTheme(preferredTheme(), false);
+setProject(projectFromHash() || projectOptions[0]?.dataset.projectOption, true);
+queueScrollSpy();

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Micronaut Platform Docs {{platform.displayVersion}}</title>
+    <link rel="stylesheet" href="{{guideAssetPath}}/css/main.css" type="text/css" media="screen, print" title="Micronaut Guide" charset="utf-8">
+    <link rel="stylesheet" href="{{guideAssetPath}}/css/custom.css" type="text/css" media="screen, print" title="Micronaut Custom Guide" charset="utf-8">
+    <link rel="stylesheet" href="{{guideAssetPath}}/css/pdf.css" type="text/css" media="print" title="Micronaut PDF" charset="utf-8">
+    <link rel="stylesheet" href="{{guideAssetPath}}/css/highlight/agate.css">
+    <link rel="stylesheet" href="{{guideAssetPath}}/css/multi-language-sample.css">
+    <link rel="stylesheet" href="{{assetPath}}/site.css">
+    <script src="{{guideAssetPath}}/js/highlight.pack.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+</head>
+<body class="body js" id="docs" data-project="{{defaultProject}}">
+    <div class="app-shell">
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <a class="sidebar-brand" href="#{{defaultProject}}-introduction" aria-label="Micronaut Platform Docs">
+                    <span class="sidebar-logo-wrap" aria-hidden="true">
+                        <img class="sidebar-logo sidebar-logo-light" src="{{assetPath}}/logos/micronaut-horizontal-black.svg" alt="">
+                        <img class="sidebar-logo sidebar-logo-dark" src="{{assetPath}}/logos/micronaut-horizontal-white.svg" alt="">
+                    </span>
+                </a>
+            </div>
+            <nav class="sidebar-content toc" aria-label="Projects">
+                <section class="sidebar-group">
+                    <div class="sidebar-group-label">Projects</div>
+                    <div class="sidebar-projects">
+{{#each documents}}
+                        <details class="project-section" data-project-nav="{{slug}}"{{#if selected}} open{{/if}}>
+                            <summary data-project-option="{{slug}}" aria-current="{{selected}}" title="{{displayName}}">
+                                {{{../icons.bookOpen}}}
+                                <span class="project-title">{{displayName}}</span>
+{{#if version}}
+                                <small>{{version}}</small>
+{{/if}}
+                            </summary>
+                            <div class="toc-tree">
+{{#each toc}}
+{{> toc-node}}
+{{/each}}
+                            </div>
+                        </details>
+{{/each}}
+                    </div>
+                </section>
+            </nav>
+            <div class="sidebar-rail" aria-hidden="true"></div>
+        </aside>
+        <div class="app-main">
+            <header class="topbar">
+                <button class="sidebar-collapse" type="button" aria-controls="sidebar" aria-expanded="true" title="Collapse sidebar" aria-label="Collapse sidebar">
+                    {{{icons.panelLeft}}}
+                    <span class="visually-hidden" data-sidebar-collapse-label>Collapse sidebar</span>
+                </button>
+                <span class="topbar-separator" aria-hidden="true"></span>
+                <nav class="topbar-title" aria-label="Breadcrumb">
+                    <a href="#{{defaultProject}}-introduction">Micronaut Platform Docs</a>
+                    <span aria-hidden="true">/</span>
+                    <span class="topbar-version" title="{{platform.revision}}" data-platform>
+                        {{{icons.gitBranch}}}
+                        <span>{{platform.displayVersion}}</span>
+                    </span>
+                </nav>
+                <div class="topbar-actions">
+                    <button id="theme-switcher" class="theme-toggle" type="button" title="Switch to dark theme" aria-label="Switch to dark theme" aria-pressed="false" data-theme-switcher>
+                        <span class="theme-icon theme-icon-moon">{{{icons.moon}}}</span>
+                        <span class="theme-icon theme-icon-sun">{{{icons.sun}}}</span>
+                    </button>
+                </div>
+                <button class="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" title="Open sidebar" aria-label="Open sidebar">
+                    {{{icons.menu}}}
+                </button>
+            </header>
+            <main class="content" id="content">
+{{#each documents}}
+            <article class="guide-document docs-content" data-project="{{slug}}"{{#unless selected}} hidden{{/unless}}>
+                <div class="document-meta">
+                    <a href="{{repositoryUrl}}" aria-label="{{displayName}} GitHub repository">
+                        {{{../icons.github}}}
+                        <span>GitHub repository</span>
+                    </a>
+{{#if version}}
+                    <span><strong>Version</strong>{{version}}</span>
+{{/if}}
+                    <span>{{{../icons.gitBranch}}}<strong>Branch</strong>{{branch}}</span>
+                </div>
+{{{contentHtml}}}
+            </article>
+{{/each}}
+            </main>
+        </div>
+    </div>
+    <script src="{{guideAssetPath}}/js/multi-language-sample.js"></script>
+    <script src="{{assetPath}}/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+[submodule "repos/micronaut-core"]
+	path = repos/micronaut-core
+	url = https://github.com/micronaut-projects/micronaut-core.git
+	branch = 5.0.x
+[submodule "repos/micronaut-data"]
+	path = repos/micronaut-data
+	url = https://github.com/micronaut-projects/micronaut-data.git
+	branch = 5.0.x
+[submodule "repos/micronaut-serde"]
+	path = repos/micronaut-serde
+	url = https://github.com/micronaut-projects/micronaut-serialization.git
+	branch = 3.0.x
+[submodule "repos/micronaut-platform"]
+	path = repos/micronaut-platform
+	url = https://github.com/micronaut-projects/micronaut-platform.git
+	branch = 5.0.x
