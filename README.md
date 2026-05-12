@@ -60,6 +60,8 @@ Run the workflow in this order from the repository root.
 
 This task reads `repos/micronaut-platform/gradle/libs.versions.toml`, discovers every Micronaut BOM project managed by the platform, resolves the matching GitHub repository, derives the documentation branch from the platform version, and writes `gradle/platform-doc-projects.properties`.
 
+`micronaut-guides` is intentionally excluded from aggregation because it is not one of the project guide sites rendered into this platform docs page.
+
 Repository ordering is based on `repositoryCreatedAt`. The task first asks the GitHub API for repository creation dates. If a repository cannot be resolved remotely, it falls back to the oldest local git root commit when the submodule is present. If neither source is available, it writes `9999-12-31T23:59:59Z` as an unknown-date sentinel so unresolved projects sort last.
 
 2. Add missing documentation submodules.

@@ -41,6 +41,7 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
         "oraclecloud", "micronaut-oracle-cloud",
         "serialization", "micronaut-serialization"
     );
+    private static final Set<String> EXCLUDED_PROJECT_KEYS = Set.of("guides");
     private static final Set<String> UPPERCASE_WORDS = Set.of(
         "acme",
         "aot",
@@ -80,7 +81,26 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
         Map<String, PlatformVersions.PlatformProjectVersion> platformProjects = PlatformVersions.readMicronautBomProjects(
             platformVersionCatalog
         );
-        getLogger().quiet("Found {} managed Micronaut projects and {} configured submodules.", platformProjects.size(), submodules.size());
+        List<PlatformVersions.PlatformProjectVersion> includedProjects = platformProjects.values()
+            .stream()
+            .filter(platformProject -> !EXCLUDED_PROJECT_KEYS.contains(platformProject.projectKey()))
+            .toList();
+        List<PlatformVersions.PlatformProjectVersion> excludedProjects = platformProjects.values()
+            .stream()
+            .filter(platformProject -> EXCLUDED_PROJECT_KEYS.contains(platformProject.projectKey()))
+            .toList();
+        getLogger().quiet(
+            "Found {} managed Micronaut projects, selected {} docs projects, and {} configured submodules.",
+            platformProjects.size(),
+            includedProjects.size(),
+            submodules.size()
+        );
+        if (!excludedProjects.isEmpty()) {
+            getLogger().quiet(
+                "Excluded from docs aggregation: {}.",
+                excludedProjects.stream().map(PlatformVersions.PlatformProjectVersion::projectKey).toList()
+            );
+        }
 
         HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(8))
@@ -93,7 +113,7 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
         List<GuideProject> projects = new ArrayList<>();
         int index = 0;
         int unknownCreatedAt = 0;
-        for (PlatformVersions.PlatformProjectVersion platformProject : platformProjects.values()) {
+        for (PlatformVersions.PlatformProjectVersion platformProject : includedProjects) {
             RepositoryMetadata metadata = resolveRepository(client, repositoryCreationDates, platformProject);
             String repositoryUrl = "https://github.com/micronaut-projects/" + metadata.name() + ".git";
             Submodule submodule = submodules.get(normalizedRepositoryUrl(repositoryUrl));
@@ -110,7 +130,7 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
             getLogger().quiet(
                 "[{}/{}] {} -> {} ({}, {})",
                 ++index,
-                platformProjects.size(),
+                includedProjects.size(),
                 displayName,
                 metadata.name(),
                 branch,
