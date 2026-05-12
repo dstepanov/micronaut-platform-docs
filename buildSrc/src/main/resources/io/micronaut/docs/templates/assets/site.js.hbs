@@ -5,12 +5,21 @@ const firstSections = {
 };
 const projectSlugs = Object.keys(firstSections);
 const projectSlugsByLength = [...projectSlugs].sort((left, right) => right.length - left.length);
+const overviewHash = "platform";
+const overviewPage = document.querySelector("[data-overview]");
 const projectOptions = Array.from(document.querySelectorAll("[data-project-option]"));
 const sidebarCollapse = document.querySelector(".sidebar-collapse");
 const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-label]");
 const sidebarToggle = document.querySelector(".sidebar-toggle");
 const sidebarContent = document.querySelector(".sidebar-content");
 const themeSwitcher = document.querySelector("[data-theme-switcher]");
+const referenceOverlay = document.querySelector("[data-reference-overlay]");
+const referencePanel = document.querySelector("[data-reference-panel]");
+const referenceFrame = document.querySelector("[data-reference-frame]");
+const referenceTitle = document.querySelector("[data-reference-title]");
+const referenceProject = document.querySelector("[data-reference-project-label]");
+const referenceOpenNew = document.querySelector("[data-reference-open-new]");
+const referenceExpand = document.querySelector("[data-reference-expand]");
 const projectArticles = new Map(Array.from(document.querySelectorAll("article.guide-document[data-project]")).map((article) => [article.dataset.project, article]));
 const projectSections = new Map(projectOptions.map((summary) => {
     const section = summary.closest("[data-project-nav]");
@@ -20,6 +29,8 @@ const themeStorageKey = "theme";
 const headingCache = new Map();
 let activeSectionId = "";
 let activeLink;
+let activeReferenceButton;
+let activeReferenceKind = "";
 let scrollSpyFrame = 0;
 let contentScrollFrame = 0;
 
@@ -97,6 +108,9 @@ window.switchTheme = switchTheme;
 
 function projectFromHash() {
     const hash = decodeURIComponent(window.location.hash.slice(1));
+    if (!hash || hash === overviewHash) {
+        return undefined;
+    }
     return projectFromSectionId(hash);
 }
 
@@ -118,6 +132,9 @@ function sectionHeadings(project) {
 
 function activeSectionFromScroll() {
     const project = document.body.dataset.project;
+    if (!firstSections[project]) {
+        return "";
+    }
     const headings = sectionHeadings(project);
     const topbarHeight = document.querySelector(".topbar")?.getBoundingClientRect().height ?? 0;
     const activationTop = topbarHeight + 24;
@@ -146,12 +163,12 @@ function queueScrollSpy() {
 }
 
 function scrollProjectSubmenu(section) {
-    const submenu = section?.querySelector(".toc-tree");
-    if (!sidebarContent || !submenu) {
+    const projectOption = section?.querySelector("[data-project-option]");
+    if (!sidebarContent || !projectOption) {
         return;
     }
     window.requestAnimationFrame(() => {
-        const top = submenu.getBoundingClientRect().top - sidebarContent.getBoundingClientRect().top + sidebarContent.scrollTop;
+        const top = projectOption.getBoundingClientRect().top - sidebarContent.getBoundingClientRect().top + sidebarContent.scrollTop - 8;
         sidebarContent.scrollTo({
             top: Math.max(0, top),
             behavior: "auto"
@@ -159,8 +176,7 @@ function scrollProjectSubmenu(section) {
     });
 }
 
-function scrollToSectionNow(sectionId) {
-    const target = document.getElementById(sectionId);
+function scrollToElementNow(target) {
     if (!target) {
         return;
     }
@@ -180,6 +196,15 @@ function scrollToSectionNow(sectionId) {
     });
 }
 
+function scrollToSectionNow(sectionId) {
+    scrollToElementNow(document.getElementById(sectionId));
+}
+
+function scrollToProjectTitleNow(project) {
+    const article = projectSections.get(project)?.article;
+    scrollToElementNow(article);
+}
+
 function scrollToSection(sectionId) {
     if (contentScrollFrame) {
         window.cancelAnimationFrame(contentScrollFrame);
@@ -194,15 +219,155 @@ function scrollToSection(sectionId) {
     });
 }
 
+function scrollToProjectTitle(project, activeSectionIdForProject) {
+    if (contentScrollFrame) {
+        window.cancelAnimationFrame(contentScrollFrame);
+    }
+    contentScrollFrame = window.requestAnimationFrame(() => {
+        contentScrollFrame = window.requestAnimationFrame(() => {
+            contentScrollFrame = 0;
+            scrollToProjectTitleNow(project);
+            refreshActiveLink(activeSectionIdForProject);
+            queueScrollSpy();
+        });
+    });
+}
+
+function setReferenceExpanded(expanded) {
+    document.body.classList.toggle("reference-expanded", expanded);
+    if (referenceExpand) {
+        const label = expanded ? "Restore reference panel size" : "Expand reference panel";
+        referenceExpand.setAttribute("aria-pressed", String(expanded));
+        referenceExpand.setAttribute("aria-label", label);
+        referenceExpand.setAttribute("title", label);
+    }
+}
+
+function openReference(button) {
+    if (!referencePanel || !referenceFrame || !button) {
+        return;
+    }
+    const url = button.dataset.referenceUrl;
+    if (!url) {
+        return;
+    }
+    if (activeReferenceButton && activeReferenceButton !== button) {
+        activeReferenceButton.setAttribute("aria-pressed", "false");
+    }
+    activeReferenceButton = button;
+    activeReferenceKind = button.dataset.referenceKind || "";
+    button.setAttribute("aria-pressed", "true");
+    document.body.classList.add("reference-open");
+    referencePanel.hidden = false;
+    if (referenceOverlay) {
+        referenceOverlay.hidden = false;
+    }
+    const title = button.dataset.referenceTitle || "Reference";
+    const projectName = button.dataset.referenceProjectName || "";
+    if (referenceTitle) {
+        referenceTitle.textContent = title;
+    }
+    if (referenceProject) {
+        referenceProject.textContent = projectName;
+    }
+    if (referenceOpenNew) {
+        referenceOpenNew.href = url;
+    }
+    if (referenceFrame.getAttribute("src") !== url) {
+        referenceFrame.src = url;
+    }
+    referenceFrame.title = projectName ? projectName + " " + title : title;
+}
+
+function closeReference() {
+    if (activeReferenceButton) {
+        activeReferenceButton.setAttribute("aria-pressed", "false");
+    }
+    activeReferenceButton = undefined;
+    activeReferenceKind = "";
+    document.body.classList.remove("reference-open");
+    setReferenceExpanded(false);
+    if (referencePanel) {
+        referencePanel.hidden = true;
+    }
+    if (referenceOverlay) {
+        referenceOverlay.hidden = true;
+    }
+    if (referenceFrame) {
+        referenceFrame.removeAttribute("src");
+    }
+    if (referenceOpenNew) {
+        referenceOpenNew.removeAttribute("href");
+    }
+}
+
+function updateReferenceProject(project) {
+    if (!activeReferenceKind || !referencePanel || referencePanel.hidden) {
+        return;
+    }
+    const article = projectSections.get(project)?.article;
+    const button = article?.querySelector("[data-reference-open][data-reference-kind='" + CSS.escape(activeReferenceKind) + "']");
+    if (button) {
+        openReference(button);
+    } else {
+        closeReference();
+    }
+}
+
+function clearActiveLink() {
+    if (activeLink) {
+        activeLink.classList.remove("active");
+        activeLink = undefined;
+    }
+    activeSectionId = "";
+}
+
+function setOverview(options) {
+    const settings = options || {};
+    const previousProject = document.body.dataset.project;
+    const previous = projectSections.get(previousProject);
+    if (previous) {
+        if (previous.article) {
+            previous.article.hidden = true;
+        }
+        previous.section.classList.remove("active");
+        previous.summary.setAttribute("aria-current", "false");
+    }
+    document.body.dataset.project = "";
+    document.body.classList.add("overview-active");
+    if (overviewPage) {
+        overviewPage.hidden = false;
+    }
+    clearActiveLink();
+    closeReference();
+    if (settings.updateHash && (settings.forceHash || window.location.hash.slice(1) !== overviewHash)) {
+        history.replaceState(null, "", "#" + overviewHash);
+    }
+    if (settings.scrollContent) {
+        window.scrollTo({
+            top: 0,
+            behavior: "auto"
+        });
+    }
+}
+
 function setProject(project, options) {
     const settings = options || {};
     if (!firstSections[project]) {
         project = projectSlugs[0];
     }
+    if (!project) {
+        setOverview(settings);
+        return;
+    }
     const previousProject = document.body.dataset.project;
     const previous = projectSections.get(previousProject);
     const next = projectSections.get(project);
     document.body.dataset.project = project;
+    document.body.classList.remove("overview-active");
+    if (overviewPage) {
+        overviewPage.hidden = true;
+    }
 
     if (previousProject !== project && previous) {
         if (previous.article) {
@@ -222,17 +387,25 @@ function setProject(project, options) {
     }
 
     const firstSection = firstSections[project];
+    const targetSection = settings.sectionId || firstSection;
     if (settings.updateHash && (settings.forceHash || !projectFromHash())) {
-        history.replaceState(null, "", "#" + firstSection);
+        history.replaceState(null, "", "#" + targetSection);
     }
-    refreshActiveLink(settings.scrollContent ? firstSection : undefined);
+    refreshActiveLink(settings.scrollContent ? targetSection : undefined);
     if (settings.scrollContent) {
-        scrollToSection(firstSection);
+        if (settings.scrollProjectTitle) {
+            scrollToProjectTitle(project, targetSection);
+        } else {
+            scrollToSection(targetSection);
+        }
     } else {
         queueScrollSpy();
     }
     if (settings.scrollSubmenu && project !== previousProject) {
         scrollProjectSubmenu(next?.section);
+    }
+    if (project !== previousProject) {
+        updateReferenceProject(project);
     }
 }
 
@@ -274,12 +447,29 @@ projectOptions.forEach((summary) => {
             updateHash: true,
             forceHash: true,
             scrollContent: true,
+            scrollProjectTitle: true,
             scrollSubmenu: true
         });
     });
 });
 
 document.addEventListener("click", (event) => {
+    const referenceTrigger = event.target.closest("[data-reference-open]");
+    if (referenceTrigger) {
+        event.preventDefault();
+        openReference(referenceTrigger);
+        return;
+    }
+    if (event.target.closest("[data-reference-close]")) {
+        event.preventDefault();
+        closeReference();
+        return;
+    }
+    if (event.target.closest("[data-reference-expand]")) {
+        event.preventDefault();
+        setReferenceExpanded(!document.body.classList.contains("reference-expanded"));
+        return;
+    }
     const summaryLink = event.target.closest("summary a");
     if (summaryLink) {
         event.stopPropagation();
@@ -288,9 +478,27 @@ document.addEventListener("click", (event) => {
     if (!hashLink) {
         return;
     }
-    const targetProject = projectFromSectionId(hashLink.hash.slice(1));
+    const targetId = decodeURIComponent(hashLink.hash.slice(1));
+    if (!targetId || targetId === overviewHash) {
+        event.preventDefault();
+        setOverview({
+            updateHash: true,
+            forceHash: true,
+            scrollContent: true
+        });
+        document.body.classList.remove("sidebar-open");
+        sidebarToggle?.setAttribute("aria-expanded", "false");
+        return;
+    }
+    const targetProject = projectFromSectionId(targetId);
     if (targetProject) {
+        event.preventDefault();
         setProject(targetProject, {
+            sectionId: targetId,
+            updateHash: true,
+            forceHash: true,
+            scrollContent: true,
+            scrollProjectTitle: Boolean(hashLink.closest("[data-overview-doc-link]")),
             scrollSubmenu: targetProject !== document.body.dataset.project
         });
         document.body.classList.remove("sidebar-open");
@@ -319,14 +527,46 @@ sidebarCollapse?.addEventListener("click", () => {
 
 themeSwitcher?.addEventListener("click", () => switchTheme(true));
 
+window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && referencePanel && !referencePanel.hidden) {
+        closeReference();
+    }
+});
+
 window.addEventListener("hashchange", () => {
-    setProject(projectFromHash() || document.body.dataset.project, false);
+    const sectionId = decodeURIComponent(window.location.hash.slice(1));
+    if (!sectionId || sectionId === overviewHash) {
+        setOverview(false);
+        return;
+    }
+    const targetProject = projectFromSectionId(sectionId);
+    if (!targetProject) {
+        setOverview(false);
+        return;
+    }
+    setProject(targetProject, {
+        sectionId,
+        scrollContent: true
+    });
 });
 window.addEventListener("scroll", queueScrollSpy, { passive: true });
 window.addEventListener("resize", queueScrollSpy);
 
 applyTheme(preferredTheme(), false);
-setProject(projectFromHash() || projectOptions[0]?.dataset.projectOption, {
-    updateHash: true
-});
-queueScrollSpy();
+const initialSectionId = decodeURIComponent(window.location.hash.slice(1));
+if (!initialSectionId || initialSectionId === overviewHash) {
+    setOverview(false);
+} else {
+    const initialProject = projectFromSectionId(initialSectionId);
+    if (initialProject) {
+        setProject(initialProject, {
+            sectionId: initialSectionId,
+            scrollContent: true
+        });
+    } else {
+        setOverview(false);
+    }
+}
+if (!document.body.classList.contains("overview-active")) {
+    queueScrollSpy();
+}

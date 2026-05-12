@@ -8,8 +8,11 @@ import com.github.jknack.handlebars.io.ClassPathTemplateLoader;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
@@ -28,17 +31,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.jar.JarInputStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String TEMPLATE_ROOT = "/io/micronaut/docs/templates";
     private static final String SITE_ASSET_PATH = "platform-assets";
     private static final String GUIDE_THEME_ASSET_PATH = "guide-assets";
+    private static final String OVERVIEW_SECTION_ID = "platform";
+    private static final int CARD_DESCRIPTION_MIN_WORDS = 24;
+    private static final int CARD_DESCRIPTION_MAX_WORDS = 30;
     private static final String GUIDE_THEME_RESOURCE = "grails-doc-files.jar";
     private static final String SITE_CSS_RESOURCE = "/io/micronaut/docs/assets/site.css";
     private static final String LOGO_BLACK_RESOURCE = "/io/micronaut/docs/assets/logos/micronaut-horizontal-black.svg";
@@ -47,6 +53,39 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String LUCIDE_ICON_ROOT = "META-INF/resources/webjars/lucide-static/%s/icons/";
     private static final Set<String> GUIDE_THEME_DIRECTORIES = Set.of("css/", "fonts/", "img/default/", "js/", "style/");
     private static final Set<String> GENERATED_DOC_THEME_DIRECTORIES = Set.of("css/", "fonts/", "js/", "style/");
+    private static final String EMBEDDED_REFERENCE_STYLE = """
+
+        <style>
+            html {
+                scroll-padding-top: 16px;
+            }
+
+            body {
+                margin: 0 !important;
+            }
+
+            #navigation,
+            header[role="banner"],
+            nav.toc {
+                display: none !important;
+            }
+
+            #main,
+            .main-grid {
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            #main > .docs-content,
+            .docs-content,
+            main[role="main"] {
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 24px !important;
+            }
+        </style>
+        """;
     private static final Pattern TITLE = Pattern.compile("<title>(.*?)</title>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern VERSION = Pattern.compile("<strong>\\s*Version:\\s*</strong>\\s*([^<\\r\\n]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern DIV_TAG = Pattern.compile("<(/?)div\\b[^>]*>", Pattern.CASE_INSENSITIVE);
@@ -54,6 +93,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final Pattern ID_ATTRIBUTE = Pattern.compile("\\bid\\s*=\\s*\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern URL_ATTRIBUTE = Pattern.compile("\\b(href|src)\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern IMG_TAG = Pattern.compile("<img\\b[^>]*>", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PARAGRAPH_TAG = Pattern.compile("<p\\b[^>]*>(.*?)</p>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_TAG = Pattern.compile("<svg\\b([^>]*)>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_CLASS = Pattern.compile("\\bclass\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
 
@@ -68,14 +108,26 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getProjectManifest();
 
+    @InputFile
+    @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getDescriptionCatalog();
+
     @OutputDirectory
     public abstract DirectoryProperty getOutputDirectory();
+
+    @Input
+    @Optional
+    public abstract Property<String> getProjectSlugs();
 
     @TaskAction
     public void generate() throws IOException, InterruptedException {
         Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
         Path outputDirectory = getOutputDirectory().get().getAsFile().toPath();
-        List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
+        List<GuideProject> projects = GuideProject.selectBySlugs(
+            GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath()),
+            getProjectSlugs().getOrElse("")
+        );
         getLogger().quiet("Generating platform docs site for {} projects at {}.", projects.size(), outputDirectory);
 
         getLogger().quiet("Cleaning output directory: {}", outputDirectory);
@@ -83,6 +135,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         Files.createDirectories(outputDirectory);
 
         Map<String, String> platformVersions = PlatformVersions.read(getPlatformVersionCatalog().get().getAsFile().toPath());
+        Properties descriptions = readDescriptionCatalog();
         getLogger().quiet("Copying shared Micronaut guide theme assets.");
         copyGuideThemeAssets(outputDirectory);
         List<GuideDocument> documents = new ArrayList<>();
@@ -101,8 +154,24 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
 
         getLogger().quiet("Writing platform UI assets.");
         writeSiteAssets(outputDirectory, documents);
-        Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents)), StandardCharsets.UTF_8);
+        Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents, descriptions)), StandardCharsets.UTF_8);
         getLogger().quiet("Generated platform docs site: {}", outputDirectory.resolve("index.html"));
+    }
+
+    private Properties readDescriptionCatalog() throws IOException {
+        Properties properties = new Properties();
+        if (!getDescriptionCatalog().isPresent()) {
+            return properties;
+        }
+        Path catalog = getDescriptionCatalog().get().getAsFile().toPath();
+        if (!Files.isRegularFile(catalog)) {
+            return properties;
+        }
+        getLogger().quiet("Reading platform docs descriptions from {}.", catalog);
+        try (InputStream input = Files.newInputStream(catalog)) {
+            properties.load(input);
+        }
+        return properties;
     }
 
     private static GuideDocument parseGuide(GuideProject project, String html, Path tocFile, String platformVersion) throws IOException {
@@ -173,18 +242,36 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         try (var stream = Files.walk(sourceDirectory)) {
             for (Path source : stream.toList()) {
                 String relativePath = sourceDirectory.relativize(source).toString().replace('\\', '/');
-                if (isGeneratedDocsThemeAsset(relativePath)) {
-                    continue;
-                }
                 Path target = targetDirectory.resolve(relativePath);
                 if (Files.isDirectory(source)) {
                     Files.createDirectories(target);
                 } else {
                     Files.createDirectories(target.getParent());
-                    Files.copy(source, target);
+                    if (isEmbeddedReferenceHtml(relativePath)) {
+                        Files.writeString(
+                            target,
+                            injectEmbeddedReferenceStyle(Files.readString(source, StandardCharsets.UTF_8)),
+                            StandardCharsets.UTF_8
+                        );
+                    } else {
+                        Files.copy(source, target);
+                    }
                 }
             }
         }
+    }
+
+    private static boolean isEmbeddedReferenceHtml(String relativePath) {
+        return relativePath.equals("guide/configurationreference.html")
+            || relativePath.startsWith("api/") && relativePath.endsWith(".html");
+    }
+
+    private static String injectEmbeddedReferenceStyle(String html) {
+        int headEnd = html.indexOf("</head>");
+        if (headEnd < 0) {
+            return html;
+        }
+        return html.substring(0, headEnd) + EMBEDDED_REFERENCE_STYLE + html.substring(headEnd);
     }
 
     private static boolean isGeneratedDocsThemeAsset(String relativePath) {
@@ -206,12 +293,12 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
     }
 
-    private static Optional<String> firstMatch(Pattern pattern, String html) {
+    private static java.util.Optional<String> firstMatch(Pattern pattern, String html) {
         Matcher matcher = pattern.matcher(html);
         if (matcher.find()) {
-            return Optional.of(matcher.group(1));
+            return java.util.Optional.of(matcher.group(1));
         }
-        return Optional.empty();
+        return java.util.Optional.empty();
     }
 
     private static List<TocItem> readTocItems(GuideProject project, Path tocFile) throws IOException {
@@ -426,15 +513,16 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
     }
 
-    private static Map<String, Object> siteModel(Path projectDirectory, List<GuideDocument> documents) throws IOException, InterruptedException {
+    private static Map<String, Object> siteModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions) throws IOException, InterruptedException {
         String defaultProject = documents.get(0).project().slug();
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("assetPath", SITE_ASSET_PATH);
         model.put("guideAssetPath", GUIDE_THEME_ASSET_PATH);
         model.put("defaultProject", defaultProject);
+        model.put("overviewSectionId", OVERVIEW_SECTION_ID);
         model.put("platform", platformModel(projectDirectory));
         model.put("icons", iconModel());
-        model.put("documents", documentModels(documents));
+        model.put("documents", documentModels(projectDirectory, documents, descriptions));
         return model;
     }
 
@@ -476,13 +564,19 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static Map<String, String> iconModel() throws IOException {
         Map<String, String> icons = new LinkedHashMap<>();
         icons.put("bookOpen", lucideIcon("book-open", "project-icon"));
+        icons.put("braces", lucideIcon("braces", "badge-icon"));
         icons.put("externalLink", lucideIcon("external-link", "badge-icon"));
+        icons.put("fileText", lucideIcon("file-text", "badge-icon"));
         icons.put("github", lucideIcon("github", "badge-icon"));
         icons.put("gitBranch", lucideIcon("git-branch", "badge-icon"));
+        icons.put("maximize2", lucideIcon("maximize-2", "trigger-icon"));
         icons.put("menu", lucideIcon("menu", "trigger-icon"));
+        icons.put("minimize2", lucideIcon("minimize-2", "trigger-icon"));
         icons.put("moon", lucideIcon("moon", "theme-icon-svg"));
         icons.put("panelLeft", lucideIcon("panel-left", "trigger-icon"));
+        icons.put("slidersHorizontal", lucideIcon("sliders-horizontal", "badge-icon"));
         icons.put("sun", lucideIcon("sun", "theme-icon-svg"));
+        icons.put("x", lucideIcon("x", "trigger-icon"));
         return icons;
     }
 
@@ -539,15 +633,15 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return model;
     }
 
-    private static List<Map<String, Object>> documentModels(List<GuideDocument> documents) {
+    private static List<Map<String, Object>> documentModels(Path projectDirectory, List<GuideDocument> documents, Properties descriptions) {
         List<Map<String, Object>> models = new ArrayList<>();
         for (int i = 0; i < documents.size(); i++) {
-            models.add(documentModel(documents.get(i), i == 0));
+            models.add(documentModel(projectDirectory, documents.get(i), descriptions, false));
         }
         return models;
     }
 
-    private static Map<String, Object> documentModel(GuideDocument document, boolean selected) {
+    private static Map<String, Object> documentModel(Path projectDirectory, GuideDocument document, Properties descriptions, boolean selected) {
         GuideProject project = document.project();
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("slug", project.slug());
@@ -556,11 +650,204 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("repositoryUrl", project.repositoryUrl());
         model.put("branch", project.branch());
         model.put("title", document.title());
+        ProjectDescription description = projectDescription(projectDirectory, document, descriptions);
+        model.put("shortDescription", description.shortDescription());
+        model.put("longDescription", description.longDescription());
+        model.put("description", description.longDescription());
         model.put("version", document.version());
+        model.put("firstSection", firstFragment(document));
         model.put("toc", tocNodeModels(buildTocTree(document.tocItems())));
         model.put("contentHtml", document.contentHtml());
         model.put("selected", selected);
+        String apiReferencePath = generatedDocumentPath(projectDirectory, project, "api/index.html");
+        String configurationReferencePath = generatedDocumentPath(projectDirectory, project, "guide/configurationreference.html");
+        model.put("apiReferencePath", apiReferencePath);
+        model.put("configurationReferencePath", configurationReferencePath);
+        model.put("hasReferenceLinks", !apiReferencePath.isBlank() || !configurationReferencePath.isBlank());
         return model;
+    }
+
+    private static ProjectDescription projectDescription(Path projectDirectory, GuideDocument document, Properties descriptions) {
+        ProjectDescription generated = generatedProjectDescription(projectDirectory, document);
+        String slug = document.project().slug();
+        String shortDescription = descriptionProperty(descriptions, slug, "shortDescription")
+            .orElse(generated.shortDescription());
+        String longDescription = descriptionProperty(descriptions, slug, "longDescription")
+            .orElse(generated.longDescription());
+        return new ProjectDescription(
+            withoutMicronautBranding(shortDescription),
+            normalizeCardDescription(longDescription)
+        );
+    }
+
+    private static ProjectDescription generatedProjectDescription(Path projectDirectory, GuideDocument document) {
+        GuideProject project = document.project();
+        String fallback = document.title();
+        String shortDescription = fallback;
+        Path propertiesFile = projectDirectory.resolve(project.submodulePath()).resolve("gradle.properties");
+        if (Files.isRegularFile(propertiesFile)) {
+            shortDescription = readProjectDescription(propertiesFile).orElse(fallback);
+        }
+        String introduction = introductionSummary(project, document.contentHtml());
+        String longDescription = introduction.isBlank()
+            ? enrichDescription(shortDescription, introduction, fallback)
+            : introduction;
+        return new ProjectDescription(
+            withoutMicronautBranding(shortDescription),
+            normalizeCardDescription(longDescription)
+        );
+    }
+
+    private static java.util.Optional<String> descriptionProperty(Properties descriptions, String slug, String propertyName) {
+        return java.util.Optional.ofNullable(descriptions.getProperty("project." + slug + "." + propertyName))
+            .map(GeneratePlatformDocsTask::normalizePlainText)
+            .filter(description -> !description.isBlank());
+    }
+
+    private static java.util.Optional<String> readProjectDescription(Path propertiesFile) {
+        try {
+            return java.util.Optional.ofNullable(readProperties(propertiesFile).get("projectDesc"))
+                .map(String::trim)
+                .filter(description -> !description.isBlank());
+        } catch (IOException e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    private static String introductionSummary(GuideProject project, String contentHtml) {
+        String introductionAnchor = "id=\"" + project.slug() + "-introduction\"";
+        int introductionIndex = contentHtml.indexOf(introductionAnchor);
+        String source = introductionIndex >= 0 ? contentHtml.substring(introductionIndex) : contentHtml;
+        StringBuilder summary = new StringBuilder();
+        Matcher matcher = PARAGRAPH_TAG.matcher(source);
+        while (matcher.find() && wordCount(summary.toString()) < CARD_DESCRIPTION_MAX_WORDS) {
+            String paragraph = normalizePlainText(stripTags(matcher.group(1)));
+            if (paragraph.isBlank()
+                || paragraph.startsWith("Version:")
+                || paragraph.length() < 40) {
+                continue;
+            }
+            if (!summary.isEmpty()) {
+                summary.append(' ');
+            }
+            summary.append(paragraph);
+        }
+        return normalizeCardDescription(summary.toString());
+    }
+
+    private static String enrichDescription(String description, String introduction, String fallback) {
+        String normalizedDescription = normalizePlainText(description);
+        String normalizedIntroduction = normalizePlainText(introduction);
+        if (normalizedDescription.isBlank()) {
+            normalizedDescription = fallback;
+        }
+        if (wordCount(normalizedDescription) >= CARD_DESCRIPTION_MIN_WORDS || normalizedIntroduction.isBlank()) {
+            return normalizedDescription;
+        }
+        if (containsText(normalizedIntroduction, normalizedDescription)) {
+            return normalizedIntroduction;
+        }
+        if (containsText(normalizedDescription, normalizedIntroduction)) {
+            return normalizedDescription;
+        }
+        return normalizeCardDescription(normalizedDescription + (normalizedDescription.endsWith(".") ? " " : ". ") + normalizedIntroduction);
+    }
+
+    private static boolean containsText(String text, String fragment) {
+        return text.toLowerCase(Locale.ROOT).contains(fragment.toLowerCase(Locale.ROOT));
+    }
+
+    private static String withoutMicronautBranding(String description) {
+        String normalized = normalizePlainText(description);
+        normalized = normalized
+            .replaceAll("(?i)^extensions\\s+to\\s+integrate\\s+micronaut\\s+and\\s+(.+)$", "$1 integration extensions")
+            .replaceAll("(?i)^integration\\s+between\\s+micronaut\\s+and\\s+(.+)$", "$1 integration")
+            .replaceAll("(?i)^integration\\s+between\\s+(.+)\\s+and\\s+micronaut$", "$1 integration")
+            .replaceAll("(?i)^(.+)\\s+support\\s+for\\s+micronaut$", "$1 Support")
+            .replaceAll("(?i)\\bthe\\s+micronaut\\s+framework\\b", "the framework")
+            .replaceAll("(?i)\\bmicronaut\\s+framework\\b", "the framework")
+            .replaceAll("(?i)\\bmicronaut\\b", "")
+            .replaceAll("\\s+", " ")
+            .replaceAll("\\s+([,.;:])", "$1")
+            .replaceAll("(?i)\\s+(for|with|and|in|using)$", "")
+            .trim();
+        if (normalized.isBlank()) {
+            return description;
+        }
+        if (!normalized.isEmpty() && Character.isLowerCase(normalized.charAt(0))) {
+            normalized = Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
+        }
+        return normalized;
+    }
+
+    private static String normalizePlainText(String value) {
+        return value
+            .replace("&nbsp;", " ")
+            .replace("&#160;", " ")
+            .replace("&#8203;", "")
+            .replace("&#8217;", "'")
+            .replace("&#8230;", "...")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&#39;", "'")
+            .replace("&#x27;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
+    private static String normalizeCardDescription(String value) {
+        String normalized = normalizePlainText(value);
+        if (wordCount(normalized) <= CARD_DESCRIPTION_MAX_WORDS) {
+            return normalized;
+        }
+        String sentenceLimited = sentenceLimitedDescription(normalized);
+        if (!sentenceLimited.isBlank()) {
+            return sentenceLimited;
+        }
+        return words(normalized).stream()
+            .limit(CARD_DESCRIPTION_MAX_WORDS)
+            .collect(Collectors.joining(" "))
+            .replaceAll("[,;:]$", "")
+            .trim();
+    }
+
+    private static String sentenceLimitedDescription(String value) {
+        Matcher matcher = Pattern.compile(".*?[.!?](?:\\s+|$)").matcher(value);
+        String selected = "";
+        while (matcher.find()) {
+            String candidate = (selected + matcher.group()).trim();
+            int words = wordCount(candidate);
+            if (words > CARD_DESCRIPTION_MAX_WORDS) {
+                break;
+            }
+            selected = candidate;
+        }
+        return wordCount(selected) >= CARD_DESCRIPTION_MIN_WORDS ? selected : "";
+    }
+
+    private static int wordCount(String value) {
+        return words(value).size();
+    }
+
+    private static List<String> words(String value) {
+        String normalized = normalizePlainText(value);
+        if (normalized.isBlank()) {
+            return List.of();
+        }
+        return List.of(normalized.split("\\s+"));
+    }
+
+    private static String generatedDocumentPath(Path projectDirectory, GuideProject project, String relativePath) {
+        if (!Files.isRegularFile(projectDirectory.resolve(project.generatedDocsPath()).resolve(relativePath))) {
+            return "";
+        }
+        return Path.of("assets", project.slug(), "docs")
+            .resolve(relativePath)
+            .toString()
+            .replace('\\', '/');
     }
 
     private static List<Map<String, Object>> firstSectionModels(List<GuideDocument> documents) {
@@ -654,6 +941,9 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         List<TocItem> tocItems,
         String contentHtml
     ) {
+    }
+
+    private record ProjectDescription(String shortDescription, String longDescription) {
     }
 
     private record TocItem(int level, String numberHtml, String titleHtml, String originalId, String prefixedId) {

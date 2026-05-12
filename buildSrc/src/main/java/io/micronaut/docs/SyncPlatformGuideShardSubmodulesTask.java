@@ -42,10 +42,17 @@ public abstract class SyncPlatformGuideShardSubmodulesTask extends DefaultTask {
     @Input
     public abstract Property<Integer> getShardCount();
 
+    @Input
+    @Optional
+    public abstract Property<String> getProjectSlugs();
+
     @TaskAction
     public void sync() throws IOException, InterruptedException {
         Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
-        List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
+        List<GuideProject> projects = GuideProject.selectBySlugs(
+            GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath()),
+            getProjectSlugs().getOrElse("")
+        );
         Map<String, String> versions = PlatformVersions.read(getPlatformVersionCatalog().get().getAsFile().toPath());
         PlatformDocsShardPlan.ShardSelection selection = PlatformDocsShardPlan.select(
             projects,

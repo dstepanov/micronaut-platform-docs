@@ -4,7 +4,7 @@ This repository builds a single-page Micronaut Platform documentation site from 
 
 The docs are not downloaded from the published documentation sites. Every guide is built from the corresponding source repository and then assembled into one static HTML page with a project sidebar.
 
-`repos/micronaut-platform` is the source of truth for the version set. The root build scans `repos/micronaut-platform/gradle/libs.versions.toml`, writes `gradle/platform-doc-projects.properties`, sorts projects by GitHub repository creation date, and verifies that each documentation submodule is checked out at the matching release tag declared by the platform.
+`repos/micronaut-platform` is the source of truth for the version set. The root build scans `repos/micronaut-platform/gradle/libs.versions.toml`, writes the generated project manifest in `gradle/platform-doc-projects.properties`, keeps cached repository creation dates in `gradle/platform-doc-repositories.properties`, sorts projects by repository age, and verifies that each documentation submodule is checked out at the matching release tag declared by the platform.
 
 ## Layout
 
@@ -20,6 +20,8 @@ buildSrc/
 gradle/
   platform-doc-projects.properties
                      Generated project manifest used by the Gradle tasks
+  platform-doc-repositories.properties
+                     Generated cache of repository creation dates used for sorting
   platform-doc-shards.properties
                      Preferred GitHub Actions guide-build shard plan
 repos/
@@ -42,8 +44,8 @@ build/site/
 - Java 25 is required to build Micronaut 5 documentation.
 - All Gradle commands must use the wrapper: `./gradlew`.
 - Non-test Gradle commands should use `-q`.
-- Network access is required when syncing missing submodules, fetching tags, and resolving GitHub repository metadata.
-- `GITHUB_TOKEN` or `GH_TOKEN` is optional locally, but recommended because `scanPlatformProjects` uses the GitHub API to resolve repository creation dates.
+- Network access is required when syncing missing submodules and fetching tags. `scanPlatformProjects` only needs network access when it cannot resolve repository metadata from the local cache or initialized submodules.
+- `GITHUB_TOKEN` or `GH_TOKEN` is optional locally, but recommended when `scanPlatformProjects` needs to resolve uncached GitHub repository creation dates.
 - `PLATFORM_DOCS_GUIDE_SHARD_INDEX` and `PLATFORM_DOCS_GUIDE_SHARD_COUNT`, or the matching Gradle properties `platformDocs.guideShardIndex` and `platformDocs.guideShardCount`, select a guide-build shard for GitHub Actions matrix jobs.
 - `gradle/platform-doc-shards.properties` defines the preferred shard plan. Known heavier guides can be pinned to dedicated shards while all other projects are distributed across the configured `others.shards`.
 
@@ -62,11 +64,11 @@ Run the workflow in this order from the repository root.
 ./gradlew -q scanPlatformProjects
 ```
 
-This task reads `repos/micronaut-platform/gradle/libs.versions.toml`, discovers every Micronaut BOM project managed by the platform, resolves the matching GitHub repository, derives the documentation branch from the platform version, and writes `gradle/platform-doc-projects.properties`.
+This task reads `repos/micronaut-platform/gradle/libs.versions.toml`, discovers every Micronaut BOM project managed by the platform, resolves the matching GitHub repository, derives the documentation branch from the platform version, and writes `gradle/platform-doc-projects.properties`. The project manifest contains project identity and platform mapping only; repository creation dates are written separately to `gradle/platform-doc-repositories.properties`.
 
 `micronaut-crac` and `micronaut-guides` are intentionally excluded from aggregation because they are not rendered into this platform docs page.
 
-Repository ordering is based on `repositoryCreatedAt`. The task first asks the GitHub API for repository creation dates. If a repository cannot be resolved remotely, it falls back to the oldest local git root commit when the submodule is present. If neither source is available, it writes `9999-12-31T23:59:59Z` as an unknown-date sentinel so unresolved projects sort last.
+Repository ordering is based on cached repository creation dates. The task first reads `gradle/platform-doc-repositories.properties`, then falls back to the oldest local git root commit when a submodule is present. The GitHub API is only used for repositories that are still unresolved, so normal rescans do not spend time re-fetching metadata that is already known.
 
 2. Add missing documentation submodules.
 
@@ -156,7 +158,7 @@ build/guide-docs-artifact/repos/<project>/src/main/docs/guide/toc.yml
 | Task | Purpose | Mutates files |
 | --- | --- | --- |
 | `syncPlatformSubmodule` | Initializes the `repos/micronaut-platform` submodule used as the version source of truth. | `repos/micronaut-platform` git state |
-| `scanPlatformProjects` | Scans the platform catalog and writes the generated project manifest. | `gradle/platform-doc-projects.properties` |
+| `scanPlatformProjects` | Scans the platform catalog, writes the generated project manifest, and refreshes cached repository metadata. | `gradle/platform-doc-projects.properties`, `gradle/platform-doc-repositories.properties` |
 | `writePlatformDocsShardMatrix` | Writes the GitHub Actions matrix from `gradle/platform-doc-shards.properties`. | `build/platform-docs-shard-matrix.json` |
 | `syncPlatformGuideShardSubmodules` | Initializes and aligns only the guide submodules selected by the active shard. | selected `repos/*` git state |
 | `syncPlatformProjectSubmodules` | Adds missing Micronaut project submodules and checks out platform-managed tags. | `.gitmodules`, `repos/*` |
@@ -209,6 +211,7 @@ Review changes to:
 
 - `.gitmodules`
 - `gradle/platform-doc-projects.properties`
+- `gradle/platform-doc-repositories.properties`
 - submodule pointers under `repos/*`
 - generated output under `build/site` when validating locally
 
@@ -229,5 +232,5 @@ The HTML frame, sidebar project sections, TOC entries, and JavaScript data are r
 
 - If `buildPlatformGuideDocs` reports a missing submodule, run `./gradlew -q syncPlatformProjectSubmodules`.
 - If alignment fails because a submodule has local changes, inspect the affected `repos/<project>` checkout before rerunning `alignPlatformVersions`.
-- If many manifest entries have `repositoryCreatedAt=9999-12-31T23:59:59Z`, set `GITHUB_TOKEN` or `GH_TOKEN` and rerun `scanPlatformProjects`.
+- If the generated repository metadata cache is missing entries, initialize the relevant submodules or set `GITHUB_TOKEN` or `GH_TOKEN` and rerun `scanPlatformProjects`.
 - If the generated site is missing a project, confirm that the project has `src/main/docs/guide/toc.yml` and that its submodule `docs` task produced `build/docs/guide/index.html`.

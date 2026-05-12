@@ -40,6 +40,10 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
     @Input
     public abstract Property<Integer> getShardCount();
 
+    @Input
+    @Optional
+    public abstract Property<String> getProjectSlugs();
+
     @TaskAction
     public void buildDocs() throws IOException, InterruptedException {
         String javaVersion = System.getProperty("java.specification.version");
@@ -49,7 +53,10 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
 
         Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
         String javaHome = System.getProperty("java.home");
-        List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
+        List<GuideProject> projects = GuideProject.selectBySlugs(
+            GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath()),
+            getProjectSlugs().getOrElse("")
+        );
         int shardIndex = getShardIndex().getOrElse(0);
         int shardCount = getShardCount().getOrElse(1);
         PlatformDocsShardPlan.ShardSelection selection = PlatformDocsShardPlan.select(

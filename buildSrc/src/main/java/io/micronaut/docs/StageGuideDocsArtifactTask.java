@@ -43,13 +43,20 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
     @Input
     public abstract Property<Integer> getShardCount();
 
+    @Input
+    @Optional
+    public abstract Property<String> getProjectSlugs();
+
     @TaskAction
     public void stage() throws IOException {
         Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
         Path outputDirectory = getOutputDirectory().get().getAsFile().toPath();
         int shardIndex = getShardIndex().getOrElse(0);
         int shardCount = getShardCount().getOrElse(1);
-        List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
+        List<GuideProject> projects = GuideProject.selectBySlugs(
+            GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath()),
+            getProjectSlugs().getOrElse("")
+        );
         PlatformDocsShardPlan.ShardSelection selection = PlatformDocsShardPlan.select(
             projects,
             getShardPlan().get().getAsFile().toPath(),

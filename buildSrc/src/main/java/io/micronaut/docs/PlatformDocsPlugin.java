@@ -13,6 +13,8 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
 
         var platformVersionCatalog = project.getLayout().getProjectDirectory().file("repos/micronaut-platform/gradle/libs.versions.toml");
         var projectManifest = project.getLayout().getProjectDirectory().file("gradle/platform-doc-projects.properties");
+        var repositoryMetadata = project.getLayout().getProjectDirectory().file("gradle/platform-doc-repositories.properties");
+        var descriptionCatalog = project.getLayout().getProjectDirectory().file("gradle/platform-doc-descriptions.properties");
         var shardPlan = project.getLayout().getProjectDirectory().file(PlatformDocsShardPlan.DEFAULT_RELATIVE_PATH);
         var guideShardIndex = project.getProviders()
             .gradleProperty("platformDocs.guideShardIndex")
@@ -24,6 +26,10 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_GUIDE_SHARD_COUNT"))
             .map(Integer::parseInt)
             .orElse(1);
+        var projectSlugs = project.getProviders()
+            .gradleProperty("platformDocs.projectSlugs")
+            .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_PROJECT_SLUGS"))
+            .orElse("");
 
         TaskProvider<SyncPlatformSubmoduleTask> syncPlatformSubmodule = project.getTasks().register(
             "syncPlatformSubmodule",
@@ -44,6 +50,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
+                task.getRepositoryMetadata().convention(repositoryMetadata);
                 task.dependsOn(syncPlatformSubmodule);
                 task.getOutputs().upToDateWhen(taskProvider -> false);
             }
@@ -102,6 +109,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getShardPlan().convention(shardPlan);
                 task.getShardIndex().convention(guideShardIndex);
                 task.getShardCount().convention(guideShardCount);
+                task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
                 task.mustRunAfter(alignPlatformVersions);
             }
@@ -119,6 +127,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getShardPlan().convention(shardPlan);
                 task.getShardIndex().convention(guideShardIndex);
                 task.getShardCount().convention(guideShardCount);
+                task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
             }
         );
@@ -135,6 +144,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getShardPlan().convention(shardPlan);
                 task.getShardIndex().convention(guideShardIndex);
                 task.getShardCount().convention(guideShardCount);
+                task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
                 task.dependsOn(syncPlatformGuideShardSubmodules);
                 task.mustRunAfter(verifyPlatformAlignment);
@@ -153,6 +163,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getShardPlan().convention(shardPlan);
                 task.getShardIndex().convention(guideShardIndex);
                 task.getShardCount().convention(guideShardCount);
+                task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(buildPlatformGuideDocs);
                 task.mustRunAfter(verifyPlatformAlignment);
             }
@@ -167,7 +178,9 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
+                task.getDescriptionCatalog().convention(descriptionCatalog);
                 task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("site"));
+                task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
                 task.dependsOn(verifyPlatformAlignment);
                 task.dependsOn(buildPlatformGuideDocs);
@@ -184,7 +197,9 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
+                task.getDescriptionCatalog().convention(descriptionCatalog);
                 task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("site"));
+                task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
                 task.getOutputs().upToDateWhen(taskProvider -> false);
             }
@@ -198,6 +213,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.setDescription("Checks that the generated documentation page contains each configured project.");
                 task.getIndexFile().convention(generatePlatformDocs.flatMap(taskProvider -> taskProvider.getOutputDirectory().file("index.html")));
                 task.getProjectManifest().convention(projectManifest);
+                task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(generatePlatformDocs);
             }
         );
@@ -210,6 +226,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.setDescription("Checks the rendered documentation page without building guide docs.");
                 task.getIndexFile().convention(renderPlatformDocs.flatMap(taskProvider -> taskProvider.getOutputDirectory().file("index.html")));
                 task.getProjectManifest().convention(projectManifest);
+                task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(renderPlatformDocs);
             }
         );

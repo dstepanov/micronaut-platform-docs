@@ -36,7 +36,6 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
     private static final Pattern REPOSITORY_NAME = Pattern.compile("\"name\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern CREATED_AT = Pattern.compile("\"created_at\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern VERSION_BRANCH = Pattern.compile("^(\\d+)\\.(\\d+)\\..*$");
-    private static final String UNKNOWN_CREATED_AT = "9999-12-31T23:59:59Z";
     private static final Map<String, String> REPOSITORY_OVERRIDES = Map.of(
         "mongo", "micronaut-mongodb",
         "oraclecloud", "micronaut-oracle-cloud",
@@ -71,14 +70,24 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
     @OutputFile
     public abstract RegularFileProperty getProjectManifest();
 
+    @OutputFile
+    public abstract RegularFileProperty getRepositoryMetadata();
+
     @TaskAction
     public void scan() throws IOException, InterruptedException {
         Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
         Path platformVersionCatalog = getPlatformVersionCatalog().get().getAsFile().toPath();
         Path projectManifest = getProjectManifest().get().getAsFile().toPath();
+        Path repositoryMetadata = getRepositoryMetadata().get().getAsFile().toPath();
         getLogger().quiet("Scanning Micronaut Platform catalog: {}", projectDirectory.relativize(platformVersionCatalog));
 
         Map<String, Submodule> submodules = readSubmodules(projectDirectory.resolve(".gitmodules"));
+        RepositoryMetadataCache metadataCache = RepositoryMetadataCache.read(repositoryMetadata, projectManifest);
+        getLogger().quiet(
+            "Loaded {} cached repository metadata entries from {}.",
+            metadataCache.size(),
+            projectDirectory.relativize(repositoryMetadata)
+        );
         Map<String, PlatformVersions.PlatformProjectVersion> platformProjects = PlatformVersions.readMicronautBomProjects(
             platformVersionCatalog
         );
@@ -103,31 +112,25 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
             );
         }
 
-        HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(8))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
-        getLogger().quiet("Resolving repository creation dates from GitHub API{}.", githubToken() == null ? "" : " with token authentication");
-        Map<String, String> repositoryCreationDates = githubOrganizationRepositoryCreationDates(client);
-        getLogger().quiet("Resolved creation dates for {} GitHub repositories.", repositoryCreationDates.size());
+        RepositoryCreationDateResolver repositoryCreationDates = new RepositoryCreationDateResolver(metadataCache.creationDates());
 
         List<GuideProject> projects = new ArrayList<>();
         int index = 0;
         int unknownCreatedAt = 0;
         for (PlatformVersions.PlatformProjectVersion platformProject : includedProjects) {
-            RepositoryMetadata metadata = resolveRepository(client, repositoryCreationDates, platformProject);
-            String repositoryUrl = "https://github.com/micronaut-projects/" + metadata.name() + ".git";
+            RepositoryMetadata metadata = resolveRepository(projectDirectory, submodules, metadataCache, repositoryCreationDates, platformProject);
+            RepositoryMetadataCache.Entry cachedMetadata = metadataCache.byName(metadata.name()).orElse(RepositoryMetadataCache.Entry.fromName(metadata.name()));
+            String repositoryUrl = choose(cachedMetadata.url(), repositoryUrl(metadata.name()));
             Submodule submodule = submodules.get(normalizedRepositoryUrl(repositoryUrl));
-            String submodulePath = submodule == null ? "repos/" + metadata.name() : submodule.path();
+            String submodulePath = choose(cachedMetadata.submodulePath(), submodule == null ? "repos/" + metadata.name() : submodule.path());
             String branch = submodule == null || submodule.branch().isBlank() ? branchFor(platformProject.version()) : submodule.branch();
             String repositoryCreatedAt = metadata.createdAt();
-            if (UNKNOWN_CREATED_AT.equals(repositoryCreatedAt)) {
-                repositoryCreatedAt = localRepositoryCreatedAt(projectDirectory.resolve(submodulePath)).orElse(UNKNOWN_CREATED_AT);
-            }
-            if (UNKNOWN_CREATED_AT.equals(repositoryCreatedAt)) {
+            if (GuideProject.UNKNOWN_REPOSITORY_CREATED_AT.equals(repositoryCreatedAt)) {
                 unknownCreatedAt++;
             }
-            String displayName = displayName(metadata.name());
+            String displayName = choose(cachedMetadata.displayName(), displayName(metadata.name()));
+            String slug = choose(cachedMetadata.slug(), slugFromSubmodulePath(submodulePath));
+            String publishedGuideUrl = choose(cachedMetadata.publishedGuideUrl(), publishedGuideUrl(metadata.name()));
             getLogger().quiet(
                 "[{}/{}] {} -> {} ({}, {})",
                 ++index,
@@ -138,9 +141,12 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
                 repositoryCreatedAt
             );
             projects.add(new GuideProject(
-                slugFromSubmodulePath(submodulePath),
+                slug,
                 displayName,
-                publishedGuideUrl(metadata.name()),
+                platformProject.projectKey(),
+                platformProject.module(),
+                metadata.name(),
+                publishedGuideUrl,
                 repositoryUrl,
                 branch,
                 submodulePath,
@@ -153,36 +159,69 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
             projectManifest,
             GuideProject.sortByRepositoryAge(projects)
         );
+        RepositoryMetadataCache.write(repositoryMetadata, GuideProject.sortByRepositoryAge(projects));
         getLogger().quiet(
-            "Wrote {} projects to {} ({} unresolved repository dates).",
+            "Wrote {} projects to {} and {} cached repository metadata entries to {} ({} unresolved repository dates).",
             projects.size(),
             projectDirectory.relativize(projectManifest),
+            projects.size(),
+            projectDirectory.relativize(repositoryMetadata),
             unknownCreatedAt
         );
     }
 
-    private static RepositoryMetadata resolveRepository(
-        HttpClient client,
-        Map<String, String> repositoryCreationDates,
+    private RepositoryMetadata resolveRepository(
+        Path projectDirectory,
+        Map<String, Submodule> submodules,
+        RepositoryMetadataCache metadataCache,
+        RepositoryCreationDateResolver repositoryCreationDates,
         PlatformVersions.PlatformProjectVersion project
-    ) {
-        for (String name : repositoryNameCandidates(project)) {
-            String createdAt = repositoryCreationDates.get(name);
-            if (createdAt != null) {
-                return new RepositoryMetadata(name, createdAt);
+    ) throws IOException, InterruptedException {
+        List<String> candidates = repositoryNameCandidates(project, metadataCache);
+        for (String name : candidates) {
+            Submodule submodule = submodules.get(normalizedRepositoryUrl(repositoryUrl(name)));
+            if (submodule != null) {
+                Optional<String> createdAt = repositoryCreationDates.cached(name);
+                if (createdAt.isEmpty()) {
+                    createdAt = localRepositoryCreatedAt(projectDirectory.resolve(submodule.path()));
+                }
+                if (createdAt.isEmpty()) {
+                    createdAt = repositoryCreationDates.github(name);
+                }
+                repositoryCreationDates.put(name, createdAt.orElse(GuideProject.UNKNOWN_REPOSITORY_CREATED_AT));
+                return new RepositoryMetadata(name, createdAt.orElse(GuideProject.UNKNOWN_REPOSITORY_CREATED_AT));
             }
         }
-        for (String name : repositoryNameCandidates(project)) {
-            Optional<String> createdAt = githubRepositoryCreatedAt(client, name);
+        for (String name : candidates) {
+            Optional<String> createdAt = repositoryCreationDates.cached(name);
+            if (createdAt.isPresent()) {
+                repositoryCreationDates.put(name, createdAt.get());
+                return new RepositoryMetadata(name, createdAt.get());
+            }
+        }
+        for (String name : candidates) {
+            Optional<String> createdAt = localRepositoryCreatedAt(projectDirectory.resolve("repos").resolve(name));
+            if (createdAt.isPresent()) {
+                repositoryCreationDates.put(name, createdAt.get());
+                return new RepositoryMetadata(name, createdAt.get());
+            }
+        }
+        for (String name : candidates) {
+            Optional<String> createdAt = repositoryCreationDates.github(name);
             if (createdAt.isPresent()) {
                 return new RepositoryMetadata(name, createdAt.get());
             }
         }
-        return new RepositoryMetadata(repositoryNameCandidates(project).get(0), UNKNOWN_CREATED_AT);
+        return new RepositoryMetadata(candidates.get(0), GuideProject.UNKNOWN_REPOSITORY_CREATED_AT);
     }
 
-    private static List<String> repositoryNameCandidates(PlatformVersions.PlatformProjectVersion project) {
+    private static List<String> repositoryNameCandidates(
+        PlatformVersions.PlatformProjectVersion project,
+        RepositoryMetadataCache metadataCache
+    ) {
         LinkedHashSet<String> names = new LinkedHashSet<>();
+        metadataCache.byProjectKey(project.projectKey()).map(RepositoryMetadataCache.Entry::name).ifPresent(names::add);
+        metadataCache.byModule(project.module()).map(RepositoryMetadataCache.Entry::name).ifPresent(names::add);
         String projectKey = project.projectKey();
         String override = REPOSITORY_OVERRIDES.get(projectKey);
         if (override != null) {
@@ -264,6 +303,24 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
         }
         githubToken = System.getenv("GH_TOKEN");
         return githubToken == null || githubToken.isBlank() ? null : githubToken;
+    }
+
+    private static void putCreationDate(Map<String, String> creationDates, String repositoryName, String createdAt) {
+        if (repositoryName == null || repositoryName.isBlank() || createdAt == null || createdAt.isBlank()) {
+            return;
+        }
+        if (GuideProject.UNKNOWN_REPOSITORY_CREATED_AT.equals(createdAt)) {
+            return;
+        }
+        creationDates.put(repositoryName, createdAt);
+    }
+
+    private static String repositoryUrl(String repositoryName) {
+        return "https://github.com/micronaut-projects/" + repositoryName + ".git";
+    }
+
+    private static String choose(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private static Optional<String> firstMatch(Pattern pattern, String text) {
@@ -430,6 +487,56 @@ public abstract class ScanPlatformProjectsTask extends DefaultTask {
             normalized = normalized.substring(0, normalized.length() - ".git".length());
         }
         return normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private final class RepositoryCreationDateResolver {
+        private final HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(8))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
+        private final Map<String, String> creationDates;
+        private Map<String, String> githubCreationDates = Map.of();
+        private boolean resolvedGithubOrganization;
+
+        private RepositoryCreationDateResolver(Map<String, String> creationDates) {
+            this.creationDates = new LinkedHashMap<>(creationDates);
+        }
+
+        private Optional<String> cached(String repositoryName) {
+            return Optional.ofNullable(creationDates.get(repositoryName));
+        }
+
+        private Optional<String> github(String repositoryName) {
+            if (!resolvedGithubOrganization) {
+                getLogger().quiet(
+                    "Resolving missing repository creation dates from GitHub API{}.",
+                    githubToken() == null ? "" : " with token authentication"
+                );
+                githubCreationDates = githubOrganizationRepositoryCreationDates(client);
+                resolvedGithubOrganization = true;
+                getLogger().quiet("Resolved creation dates for {} GitHub repositories.", githubCreationDates.size());
+            }
+            String createdAt = githubCreationDates.get(repositoryName);
+            if (createdAt == null) {
+                Optional<String> repositoryCreatedAt = githubRepositoryCreatedAt(client, repositoryName);
+                if (repositoryCreatedAt.isPresent()) {
+                    createdAt = repositoryCreatedAt.get();
+                }
+            }
+            if (createdAt == null) {
+                return Optional.empty();
+            }
+            put(repositoryName, createdAt);
+            return Optional.of(createdAt);
+        }
+
+        private void put(String repositoryName, String createdAt) {
+            putCreationDate(creationDates, repositoryName, createdAt);
+        }
+
+        private Map<String, String> creationDates() {
+            return creationDates;
+        }
     }
 
     private record RepositoryMetadata(String name, String createdAt) {

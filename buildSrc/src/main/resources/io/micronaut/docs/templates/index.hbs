@@ -13,11 +13,11 @@
     <script src="{{guideAssetPath}}/js/highlight.pack.js"></script>
     <script>hljs.initHighlightingOnLoad();</script>
 </head>
-<body class="body js" id="docs" data-project="{{defaultProject}}">
+<body class="body js overview-active" id="docs" data-project="">
     <div class="app-shell">
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
-                <a class="sidebar-brand" href="#{{defaultProject}}-introduction" aria-label="Micronaut Platform Docs">
+                <a class="sidebar-brand" href="#{{overviewSectionId}}" aria-label="Micronaut Platform Docs">
                     <span class="sidebar-logo-wrap" aria-hidden="true">
                         <img class="sidebar-logo sidebar-logo-light" src="{{assetPath}}/logos/micronaut-horizontal-black.svg" alt="">
                         <img class="sidebar-logo sidebar-logo-dark" src="{{assetPath}}/logos/micronaut-horizontal-white.svg" alt="">
@@ -57,7 +57,7 @@
                 </button>
                 <span class="topbar-separator" aria-hidden="true"></span>
                 <nav class="topbar-title" aria-label="Breadcrumb">
-                    <a href="#{{defaultProject}}-introduction">Micronaut Platform Docs</a>
+                    <a href="#{{overviewSectionId}}">Micronaut Platform Docs</a>
                     <span aria-hidden="true">/</span>
                     <span class="topbar-version" title="{{platform.revision}}" data-platform>
                         {{{icons.gitBranch}}}
@@ -75,22 +75,94 @@
                 </button>
             </header>
             <main class="content" id="content">
+                <section class="overview-page" id="{{overviewSectionId}}" data-overview tabindex="-1">
+                    <header class="overview-header">
+                        <p class="overview-description">Micronaut Framework is a modern JVM framework for modular applications and services with fast startup, low memory use, and compile-time dependency injection. These platform docs collect the core framework and companion modules in one place for aligned versions, guides, APIs, and configuration references.</p>
+                    </header>
+                    <div class="project-card-grid" aria-label="Micronaut modules">
+{{#each documents}}
+                        <article class="project-card" data-project-card="{{slug}}">
+                            <div class="project-card-header">
+                                <span class="project-card-icon" aria-hidden="true">{{{../icons.bookOpen}}}</span>
+                                <div>
+                                    <h2>{{displayName}}</h2>
+                                    <p class="project-card-short-description">{{shortDescription}}</p>
+                                </div>
+                            </div>
+                            <p class="project-card-long-description">{{longDescription}}</p>
+                            <footer class="project-card-footer">
+                                <div class="project-card-links">
+                                    <a href="#{{firstSection}}" data-overview-doc-link aria-label="Open {{displayName}} docs">
+                                        {{{../icons.fileText}}}
+                                        <span>Docs</span>
+                                    </a>
+                                    <a href="{{repositoryUrl}}" target="_blank" rel="noopener" aria-label="Open {{displayName}} GitHub repository">
+                                        {{{../icons.github}}}
+                                        <span>GitHub</span>
+                                    </a>
+                                </div>
+{{#if version}}
+                                <small class="project-card-version">{{version}}</small>
+{{/if}}
+                            </footer>
+                        </article>
+{{/each}}
+                    </div>
+                </section>
 {{#each documents}}
             <article class="guide-document docs-content" data-project="{{slug}}"{{#unless selected}} hidden{{/unless}}>
                 <div class="document-meta">
-                    <a href="{{repositoryUrl}}" aria-label="{{displayName}} GitHub repository">
-                        {{{../icons.github}}}
-                        <span>GitHub repository</span>
-                    </a>
+                    <div class="document-meta-row document-meta-primary">
+                        <a href="{{repositoryUrl}}" aria-label="{{displayName}} GitHub repository">
+                            {{{../icons.github}}}
+                            <span>GitHub repository</span>
+                        </a>
 {{#if version}}
-                    <span><strong>Version</strong>{{version}}</span>
+                        <span><strong>Version</strong>{{version}}</span>
 {{/if}}
-                    <span>{{{../icons.gitBranch}}}<strong>Branch</strong>{{branch}}</span>
+                        <span>{{{../icons.gitBranch}}}<strong>Branch</strong>{{branch}}</span>
+                    </div>
+{{#if hasReferenceLinks}}
+                    <div class="document-meta-row document-meta-references">
+{{#if apiReferencePath}}
+                        <button type="button" aria-pressed="false" aria-label="Open API for {{displayName}}" title="Open API" data-reference-open data-reference-kind="api" data-reference-project="{{slug}}" data-reference-project-name="{{displayName}}" data-reference-title="API" data-reference-url="{{apiReferencePath}}">
+                            {{{../icons.braces}}}
+                            <span>API</span>
+                        </button>
+{{/if}}
+{{#if configurationReferencePath}}
+                        <button type="button" aria-pressed="false" aria-label="Open configuration reference for {{displayName}}" title="Open configuration reference" data-reference-open data-reference-kind="configuration" data-reference-project="{{slug}}" data-reference-project-name="{{displayName}}" data-reference-title="Configuration reference" data-reference-url="{{configurationReferencePath}}">
+                            {{{../icons.slidersHorizontal}}}
+                            <span>Configuration reference</span>
+                        </button>
+{{/if}}
+                    </div>
+{{/if}}
                 </div>
 {{{contentHtml}}}
             </article>
 {{/each}}
             </main>
+            <div class="reference-overlay" data-reference-overlay data-reference-close hidden></div>
+            <aside class="reference-panel" role="dialog" aria-modal="true" aria-labelledby="reference-title" aria-label="Project reference" data-reference-panel hidden>
+                <div class="reference-header">
+                    <div class="reference-heading">
+                        <strong id="reference-title" data-reference-title>Reference</strong>
+                        <small data-reference-project-label></small>
+                    </div>
+                    <button class="reference-action" type="button" title="Expand reference panel" aria-label="Expand reference panel" aria-pressed="false" data-reference-expand>
+                        <span class="reference-expand-icon-default">{{{icons.maximize2}}}</span>
+                        <span class="reference-expand-icon-expanded">{{{icons.minimize2}}}</span>
+                    </button>
+                    <a class="reference-action" href="#" target="_blank" rel="noopener" title="Open in new tab" aria-label="Open reference in new tab" data-reference-open-new>
+                        {{{icons.externalLink}}}
+                    </a>
+                    <button class="reference-action" type="button" title="Close reference" aria-label="Close reference" data-reference-close>
+                        {{{icons.x}}}
+                    </button>
+                </div>
+                <iframe class="reference-frame" title="Project reference" loading="lazy" data-reference-frame></iframe>
+            </aside>
         </div>
     </div>
     <script src="{{guideAssetPath}}/js/multi-language-sample.js"></script>

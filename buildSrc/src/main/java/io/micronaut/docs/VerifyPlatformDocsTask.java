@@ -2,7 +2,10 @@ package io.micronaut.docs;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
@@ -28,16 +31,25 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getProjectManifest();
 
+    @Input
+    @Optional
+    public abstract Property<String> getProjectSlugs();
+
     @TaskAction
     public void verify() throws IOException {
         Path indexFile = getIndexFile().get().getAsFile().toPath();
-        List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
+        List<GuideProject> projects = GuideProject.selectBySlugs(
+            GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath()),
+            getProjectSlugs().getOrElse("")
+        );
         getLogger().quiet("Verifying generated platform docs page: {}", indexFile);
         String html = Files.readString(indexFile, StandardCharsets.UTF_8);
         int index = 0;
         for (GuideProject project : projects) {
             getLogger().quiet("[{}/{}] Verifying generated entries for {}.", ++index, projects.size(), project.displayName());
             require(html.contains("data-project=\"" + project.slug() + "\""), "Missing document for " + project.slug());
+            require(html.contains("data-project-card=\"" + project.slug() + "\""), "Missing overview card for " + project.slug());
+            require(html.contains("href=\"#" + project.slug() + "-"), "Missing overview docs link for " + project.slug());
             require(html.contains("data-project-nav=\"" + project.slug() + "\""), "Missing sidebar for " + project.slug());
             require(html.contains("data-project-option=\"" + project.slug() + "\""), "Missing sidebar project option for " + project.slug());
             Set<String> sections = projectSections(html, project.slug());
@@ -48,6 +60,11 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         }
         require(html.contains("<details class=\"toc-section\""), "Generated sidebar does not contain collapsible sections.");
         require(html.contains("<details class=\"project-section\""), "Generated sidebar does not contain first-level project sections.");
+        require(html.contains("data-overview"), "Generated page does not contain the platform overview.");
+        require(html.contains("class=\"project-card-short-description\""), "Generated overview cards do not contain short project descriptions.");
+        require(html.contains("class=\"project-card-long-description\""), "Generated overview cards do not contain long project descriptions.");
+        require(html.contains("class=\"project-card-footer\""), "Generated overview cards do not contain a footer.");
+        require(html.contains("data-overview-doc-link"), "Generated overview cards do not link back to the in-page docs.");
         require(html.contains("data-platform"), "Generated top bar does not display platform information.");
         require(html.contains("Micronaut Platform Docs"), "Generated top bar does not use the platform docs title.");
         require(!html.contains("sidebar-brand-version"), "Generated sidebar still contains the top-left version hint.");
@@ -63,7 +80,13 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(html.contains("<span>GitHub repository</span>"), "Generated document metadata does not label GitHub repository links.");
         require(html.contains("lucide-github"), "Generated document metadata does not use the Lucide GitHub icon.");
         require(html.contains("lucide-git-branch"), "Generated branch metadata does not use the Lucide git branch icon.");
-        require(html.contains("<body class=\"body js\" id=\"docs\""), "Generated page does not use Micronaut guide body font hooks.");
+        require(html.contains("data-reference-panel"), "Generated page does not contain the in-page reference panel.");
+        require(html.contains("role=\"dialog\""), "Generated reference panel does not use dialog semantics.");
+        require(html.contains("data-reference-overlay"), "Generated reference panel does not contain an overlay.");
+        require(html.contains("data-reference-open"), "Generated document metadata does not contain reference open controls.");
+        require(html.contains("data-reference-frame"), "Generated page does not contain the reference iframe.");
+        require(html.contains("<body class=\"body js"), "Generated page does not use Micronaut guide body font hooks.");
+        require(html.contains("id=\"docs\""), "Generated page does not use the docs body id.");
         require(html.contains("href=\"platform-assets/site.css\""), "Generated page does not reference the external stylesheet.");
         require(html.contains("src=\"platform-assets/site.js\""), "Generated page does not reference the external script.");
         require(html.contains("href=\"guide-assets/css/main.css\""), "Generated page does not reference the classpath Micronaut guide stylesheet.");
@@ -84,6 +107,8 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         String siteScript = Files.readString(outputDirectory.resolve("platform-assets/site.js"), StandardCharsets.UTF_8);
         require(siteScript.contains("window.addEventListener(\"scroll\", queueScrollSpy"), "Generated script does not highlight sections while scrolling.");
         require(siteScript.contains("activeSectionFromScroll"), "Generated script does not include scroll spy section detection.");
+        require(siteScript.contains("openReference"), "Generated script does not support opening project references in context.");
+        require(siteScript.contains("updateReferenceProject"), "Generated script does not keep project references aligned with the active project.");
         getLogger().quiet("Verified generated platform docs page for {} projects.", projects.size());
     }
 
