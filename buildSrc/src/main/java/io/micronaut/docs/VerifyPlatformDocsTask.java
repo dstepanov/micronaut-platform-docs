@@ -11,9 +11,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public abstract class VerifyPlatformDocsTask extends DefaultTask {
+    private static final Pattern SECTION = Pattern.compile("\\bdata-section=\"([^\"]+)\"");
 
     @InputFile
     @PathSensitive(PathSensitivity.RELATIVE)
@@ -35,7 +40,11 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
             require(html.contains("data-project=\"" + project.slug() + "\""), "Missing document for " + project.slug());
             require(html.contains("data-project-nav=\"" + project.slug() + "\""), "Missing sidebar for " + project.slug());
             require(html.contains("data-project-option=\"" + project.slug() + "\""), "Missing sidebar project option for " + project.slug());
-            require(html.contains("id=\"" + project.slug() + "-introduction\""), "Missing prefixed introduction anchor for " + project.slug());
+            Set<String> sections = projectSections(html, project.slug());
+            require(!sections.isEmpty(), "Missing sidebar section links for " + project.slug());
+            for (String section : sections) {
+                require(html.contains("id=\"" + section + "\""), "Missing content anchor " + section + " for " + project.slug());
+            }
         }
         require(html.contains("<details class=\"toc-section\""), "Generated sidebar does not contain collapsible sections.");
         require(html.contains("<details class=\"project-section\""), "Generated sidebar does not contain first-level project sections.");
@@ -82,5 +91,18 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         if (!condition) {
             throw new IllegalStateException(message);
         }
+    }
+
+    private static Set<String> projectSections(String html, String slug) {
+        Set<String> sections = new LinkedHashSet<>();
+        Matcher matcher = SECTION.matcher(html);
+        String prefix = slug + "-";
+        while (matcher.find()) {
+            String section = matcher.group(1);
+            if (section.startsWith(prefix)) {
+                sections.add(section);
+            }
+        }
+        return sections;
     }
 }

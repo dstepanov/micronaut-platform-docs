@@ -3,11 +3,12 @@ package io.micronaut.docs;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
-import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
@@ -28,6 +29,11 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getProjectManifest();
 
+    @InputFile
+    @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getShardPlan();
+
     @Input
     public abstract Property<Integer> getShardIndex();
 
@@ -46,15 +52,21 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
         List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
         int shardIndex = getShardIndex().getOrElse(0);
         int shardCount = getShardCount().getOrElse(1);
-        List<GuideProject> selectedProjects = GuideProject.shard(projects, shardIndex, shardCount);
+        PlatformDocsShardPlan.ShardSelection selection = PlatformDocsShardPlan.select(
+            projects,
+            getShardPlan().get().getAsFile().toPath(),
+            shardIndex,
+            shardCount
+        );
+        List<GuideProject> selectedProjects = selection.projects();
         getLogger().quiet(
             "Building guide docs for {} of {} projects with Java {} from {} (shard {}/{}).",
             selectedProjects.size(),
             projects.size(),
             javaVersion,
             javaHome,
-            shardIndex + 1,
-            shardCount
+            selection.shardIndex() + 1,
+            selection.shardCount()
         );
         int index = 0;
         for (GuideProject project : selectedProjects) {
@@ -80,7 +92,12 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
             }
             getLogger().quiet("[{}/{}] Built {} docs in {}.", current, selectedProjects.size(), project.displayName(), durationSince(startedAt));
         }
-        getLogger().quiet("Built guide docs for {} projects in shard {}/{}.", selectedProjects.size(), shardIndex + 1, shardCount);
+        getLogger().quiet(
+            "Built guide docs for {} projects in shard {}/{}.",
+            selectedProjects.size(),
+            selection.shardIndex() + 1,
+            selection.shardCount()
+        );
     }
 
     private static String durationSince(long startedAt) {

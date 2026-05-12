@@ -20,6 +20,8 @@ buildSrc/
 gradle/
   platform-doc-projects.properties
                      Generated project manifest used by the Gradle tasks
+  platform-doc-shards.properties
+                     Preferred GitHub Actions guide-build shard plan
 repos/
   micronaut-platform/  Version catalog source of truth, branch 5.0.x
   micronaut-*/         Guide sources discovered from the platform catalog
@@ -43,6 +45,7 @@ build/site/
 - Network access is required when syncing missing submodules, fetching tags, and resolving GitHub repository metadata.
 - `GITHUB_TOKEN` or `GH_TOKEN` is optional locally, but recommended because `scanPlatformProjects` uses the GitHub API to resolve repository creation dates.
 - `PLATFORM_DOCS_GUIDE_SHARD_INDEX` and `PLATFORM_DOCS_GUIDE_SHARD_COUNT`, or the matching Gradle properties `platformDocs.guideShardIndex` and `platformDocs.guideShardCount`, select a guide-build shard for GitHub Actions matrix jobs.
+- `gradle/platform-doc-shards.properties` defines the preferred shard plan. Known heavier guides can be pinned to dedicated shards while all other projects are distributed across the configured `others.shards`.
 
 ```bash
 java -version
@@ -117,16 +120,23 @@ Open the generated page at:
 build/site/index.html
 ```
 
-For GitHub Actions, guide docs are built in independent shards and merged before rendering the final page. A single shard can be built and staged locally with:
+For GitHub Actions, guide docs are built in independent shards and merged before rendering the final page. The matrix is generated from `gradle/platform-doc-shards.properties`:
 
 ```bash
-./gradlew -q -PplatformDocs.guideShardIndex=0 -PplatformDocs.guideShardCount=8 verifyPlatformAlignment stagePlatformGuideDocsArtifact
+./gradlew -q writePlatformDocsShardMatrix
+```
+
+A single shard can be built and staged locally with:
+
+```bash
+./gradlew -q -PplatformDocs.guideShardIndex=0 -PplatformDocs.guideShardCount=12 verifyPlatformAlignment stagePlatformGuideDocsArtifact
 ```
 
 The shard artifact is staged under `build/guide-docs-artifact` with paths that can be merged back into the repository root:
 
 ```text
 build/guide-docs-artifact/repos/<project>/build/docs
+build/guide-docs-artifact/repos/<project>/src/main/docs/guide/toc.yml
 ```
 
 ## Verification
@@ -145,7 +155,10 @@ build/guide-docs-artifact/repos/<project>/build/docs
 
 | Task | Purpose | Mutates files |
 | --- | --- | --- |
+| `syncPlatformSubmodule` | Initializes the `repos/micronaut-platform` submodule used as the version source of truth. | `repos/micronaut-platform` git state |
 | `scanPlatformProjects` | Scans the platform catalog and writes the generated project manifest. | `gradle/platform-doc-projects.properties` |
+| `writePlatformDocsShardMatrix` | Writes the GitHub Actions matrix from `gradle/platform-doc-shards.properties`. | `build/platform-docs-shard-matrix.json` |
+| `syncPlatformGuideShardSubmodules` | Initializes and aligns only the guide submodules selected by the active shard. | selected `repos/*` git state |
 | `syncPlatformProjectSubmodules` | Adds missing Micronaut project submodules and checks out platform-managed tags. | `.gitmodules`, `repos/*` |
 | `alignPlatformVersions` | Checks out each project submodule at the platform-managed release tag. | `repos/*` git state |
 | `verifyPlatformAlignment` | Verifies submodule HEAD tags match platform-managed versions. | No |
@@ -164,12 +177,13 @@ The `Platform Docs` GitHub Actions workflow lives at `.github/workflows/platform
 
 The workflow uses GitHub Actions matrix parallelism rather than parallel Gradle workers in one runner:
 
-- eight `build-guides` jobs run at the same time, one for each shard
-- each shard checks out submodules, installs Java 25, verifies platform alignment, builds only its selected projects, and uploads `build/guide-docs-artifact`
-- the `render` job downloads and merges all shard artifacts, renders `build/site`, verifies the rendered page, and uploads the GitHub Pages artifact
+- `plan` checks out the root repository without recursive submodules, initializes only `repos/micronaut-platform`, scans the platform catalog, and writes the matrix from `gradle/platform-doc-shards.properties`
+- `build-guides` runs one job per matrix shard, checks out the root repository without recursive submodules, initializes only the selected guide submodules, verifies alignment, builds docs, and uploads `build/guide-docs-artifact`
+- `render` downloads and merges all shard artifacts, initializes only `repos/micronaut-platform`, renders `build/site`, verifies the rendered page, and uploads the GitHub Pages artifact
 
 ```bash
-./gradlew -q verifyPlatformAlignment stagePlatformGuideDocsArtifact
+./gradlew -q writePlatformDocsShardMatrix
+./gradlew -q -PplatformDocs.guideShardIndex=0 -PplatformDocs.guideShardCount=12 verifyPlatformAlignment stagePlatformGuideDocsArtifact
 ./gradlew -q verifyRenderedPlatformDocs
 ```
 

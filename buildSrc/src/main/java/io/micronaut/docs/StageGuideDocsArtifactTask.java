@@ -7,6 +7,7 @@ import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
@@ -28,6 +29,11 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getProjectManifest();
 
+    @InputFile
+    @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getShardPlan();
+
     @OutputDirectory
     public abstract DirectoryProperty getOutputDirectory();
 
@@ -44,7 +50,13 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
         int shardIndex = getShardIndex().getOrElse(0);
         int shardCount = getShardCount().getOrElse(1);
         List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
-        List<GuideProject> selectedProjects = GuideProject.shard(projects, shardIndex, shardCount);
+        PlatformDocsShardPlan.ShardSelection selection = PlatformDocsShardPlan.select(
+            projects,
+            getShardPlan().get().getAsFile().toPath(),
+            shardIndex,
+            shardCount
+        );
+        List<GuideProject> selectedProjects = selection.projects();
 
         deleteDirectory(outputDirectory);
         Files.createDirectories(outputDirectory);
@@ -52,8 +64,8 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
             "Staging guide docs artifact for {} of {} projects (shard {}/{}).",
             selectedProjects.size(),
             projects.size(),
-            shardIndex + 1,
-            shardCount
+            selection.shardIndex() + 1,
+            selection.shardCount()
         );
 
         int index = 0;
@@ -65,7 +77,18 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
             Path targetDirectory = outputDirectory.resolve(project.generatedDocsPath());
             getLogger().quiet("[{}/{}] Staging {} docs.", ++index, selectedProjects.size(), project.displayName());
             copyDirectory(sourceDirectory, targetDirectory);
+            copyToc(projectDirectory, outputDirectory, project);
         }
+    }
+
+    private static void copyToc(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {
+        Path source = projectDirectory.resolve(project.tocPath());
+        if (!Files.isRegularFile(source)) {
+            throw new IOException("Missing TOC YAML for " + project.displayName() + ": " + source);
+        }
+        Path target = outputDirectory.resolve(project.tocPath());
+        Files.createDirectories(target.getParent());
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static void copyDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {

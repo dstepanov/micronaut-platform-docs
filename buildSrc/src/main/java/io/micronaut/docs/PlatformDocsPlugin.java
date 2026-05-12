@@ -13,6 +13,27 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
 
         var platformVersionCatalog = project.getLayout().getProjectDirectory().file("repos/micronaut-platform/gradle/libs.versions.toml");
         var projectManifest = project.getLayout().getProjectDirectory().file("gradle/platform-doc-projects.properties");
+        var shardPlan = project.getLayout().getProjectDirectory().file(PlatformDocsShardPlan.DEFAULT_RELATIVE_PATH);
+        var guideShardIndex = project.getProviders()
+            .gradleProperty("platformDocs.guideShardIndex")
+            .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_GUIDE_SHARD_INDEX"))
+            .map(Integer::parseInt)
+            .orElse(0);
+        var guideShardCount = project.getProviders()
+            .gradleProperty("platformDocs.guideShardCount")
+            .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_GUIDE_SHARD_COUNT"))
+            .map(Integer::parseInt)
+            .orElse(1);
+
+        TaskProvider<SyncPlatformSubmoduleTask> syncPlatformSubmodule = project.getTasks().register(
+            "syncPlatformSubmodule",
+            SyncPlatformSubmoduleTask.class,
+            task -> {
+                task.setGroup("documentation");
+                task.setDescription("Initializes the micronaut-platform submodule used as the version source of truth.");
+                task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
+            }
+        );
 
         TaskProvider<ScanPlatformProjectsTask> scanPlatformProjects = project.getTasks().register(
             "scanPlatformProjects",
@@ -23,7 +44,22 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
+                task.dependsOn(syncPlatformSubmodule);
                 task.getOutputs().upToDateWhen(taskProvider -> false);
+            }
+        );
+
+        TaskProvider<WritePlatformDocsShardMatrixTask> writePlatformDocsShardMatrix = project.getTasks().register(
+            "writePlatformDocsShardMatrix",
+            WritePlatformDocsShardMatrixTask.class,
+            task -> {
+                task.setGroup("documentation");
+                task.setDescription("Writes the GitHub Actions matrix from the configured platform docs shard plan.");
+                task.getProjectManifest().convention(projectManifest);
+                task.getShardPlan().convention(shardPlan);
+                task.getShardCount().convention(guideShardCount);
+                task.getOutputFile().convention(project.getLayout().getBuildDirectory().file("platform-docs-shard-matrix.json"));
+                task.dependsOn(scanPlatformProjects);
             }
         );
 
@@ -63,21 +99,30 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
+                task.getShardPlan().convention(shardPlan);
+                task.getShardIndex().convention(guideShardIndex);
+                task.getShardCount().convention(guideShardCount);
                 task.dependsOn(scanPlatformProjects);
                 task.mustRunAfter(alignPlatformVersions);
             }
         );
 
-        var guideShardIndex = project.getProviders()
-            .gradleProperty("platformDocs.guideShardIndex")
-            .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_GUIDE_SHARD_INDEX"))
-            .map(Integer::parseInt)
-            .orElse(0);
-        var guideShardCount = project.getProviders()
-            .gradleProperty("platformDocs.guideShardCount")
-            .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_GUIDE_SHARD_COUNT"))
-            .map(Integer::parseInt)
-            .orElse(1);
+        TaskProvider<SyncPlatformGuideShardSubmodulesTask> syncPlatformGuideShardSubmodules = project.getTasks().register(
+            "syncPlatformGuideShardSubmodules",
+            SyncPlatformGuideShardSubmodulesTask.class,
+            task -> {
+                task.setGroup("documentation");
+                task.setDescription("Initializes and aligns only the guide submodules selected by the configured shard.");
+                task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
+                task.getProjectManifest().convention(projectManifest);
+                task.getPlatformVersionCatalog().convention(platformVersionCatalog);
+                task.getShardPlan().convention(shardPlan);
+                task.getShardIndex().convention(guideShardIndex);
+                task.getShardCount().convention(guideShardCount);
+                task.dependsOn(scanPlatformProjects);
+            }
+        );
+        verifyPlatformAlignment.configure(task -> task.mustRunAfter(syncPlatformGuideShardSubmodules));
 
         TaskProvider<BuildGuideDocsTask> buildPlatformGuideDocs = project.getTasks().register(
             "buildPlatformGuideDocs",
@@ -87,9 +132,11 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.setDescription("Builds guide docs for each Micronaut project discovered from micronaut-platform.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getProjectManifest().convention(projectManifest);
+                task.getShardPlan().convention(shardPlan);
                 task.getShardIndex().convention(guideShardIndex);
                 task.getShardCount().convention(guideShardCount);
                 task.dependsOn(scanPlatformProjects);
+                task.dependsOn(syncPlatformGuideShardSubmodules);
                 task.mustRunAfter(verifyPlatformAlignment);
             }
         );
@@ -103,6 +150,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getProjectManifest().convention(projectManifest);
                 task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("guide-docs-artifact"));
+                task.getShardPlan().convention(shardPlan);
                 task.getShardIndex().convention(guideShardIndex);
                 task.getShardCount().convention(guideShardCount);
                 task.dependsOn(buildPlatformGuideDocs);
@@ -138,7 +186,6 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectManifest().convention(projectManifest);
                 task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("site"));
                 task.dependsOn(scanPlatformProjects);
-                task.dependsOn(verifyPlatformAlignment);
                 task.getOutputs().upToDateWhen(taskProvider -> false);
             }
         );

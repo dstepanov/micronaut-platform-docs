@@ -16,25 +16,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan platform docs shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Write shard matrix
+        run: ./gradlew -q writePlatformDocsShardMatrix
+
+      - name: Publish shard matrix
+        id: matrix
+        shell: bash
+        run: |
+          {
+            echo 'matrix<<EOF'
+            cat build/platform-docs-shard-matrix.json
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
   build-guides:
     name: Build guide docs shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
-      PLATFORM_DOCS_GUIDE_SHARD_COUNT: "8"
+      PLATFORM_DOCS_GUIDE_SHARD_COUNT: ${{ matrix.shard_count }}
       PLATFORM_DOCS_GUIDE_SHARD_INDEX: ${{ matrix.shard }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Setup Java 25
         uses: actions/setup-java@v5
@@ -69,7 +105,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Setup Java 25
         uses: actions/setup-java@v5
