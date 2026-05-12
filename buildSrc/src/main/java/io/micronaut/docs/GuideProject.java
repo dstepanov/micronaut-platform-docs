@@ -104,6 +104,22 @@ record GuideProject(
             .toList();
     }
 
+    static List<GuideProject> shard(List<GuideProject> projects, int shardIndex, int shardCount) {
+        if (shardCount < 1) {
+            throw new IllegalArgumentException("Shard count must be greater than zero.");
+        }
+        if (shardIndex < 0 || shardIndex >= shardCount) {
+            throw new IllegalArgumentException("Shard index " + shardIndex + " is outside shard count " + shardCount + ".");
+        }
+        List<GuideProject> selected = new ArrayList<>();
+        for (int i = 0; i < projects.size(); i++) {
+            if (i % shardCount == shardIndex) {
+                selected.add(projects.get(i));
+            }
+        }
+        return selected;
+    }
+
     private static String required(Properties properties, String key) {
         String value = properties.getProperty(key);
         if (value == null || value.isBlank()) {

@@ -32,7 +32,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             SyncPlatformProjectSubmodulesTask.class,
             task -> {
                 task.setGroup("documentation");
-                task.setDescription("Adds missing git submodules for Micronaut projects discovered from micronaut-platform.");
+                task.setDescription("Adds missing git submodules and checks out platform-managed tags for Micronaut projects discovered from micronaut-platform.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
@@ -68,6 +68,17 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             }
         );
 
+        var guideShardIndex = project.getProviders()
+            .gradleProperty("platformDocs.guideShardIndex")
+            .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_GUIDE_SHARD_INDEX"))
+            .map(Integer::parseInt)
+            .orElse(0);
+        var guideShardCount = project.getProviders()
+            .gradleProperty("platformDocs.guideShardCount")
+            .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_GUIDE_SHARD_COUNT"))
+            .map(Integer::parseInt)
+            .orElse(1);
+
         TaskProvider<BuildGuideDocsTask> buildPlatformGuideDocs = project.getTasks().register(
             "buildPlatformGuideDocs",
             BuildGuideDocsTask.class,
@@ -76,7 +87,26 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.setDescription("Builds guide docs for each Micronaut project discovered from micronaut-platform.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getProjectManifest().convention(projectManifest);
+                task.getShardIndex().convention(guideShardIndex);
+                task.getShardCount().convention(guideShardCount);
                 task.dependsOn(scanPlatformProjects);
+                task.mustRunAfter(verifyPlatformAlignment);
+            }
+        );
+
+        TaskProvider<StageGuideDocsArtifactTask> stagePlatformGuideDocsArtifact = project.getTasks().register(
+            "stagePlatformGuideDocsArtifact",
+            StageGuideDocsArtifactTask.class,
+            task -> {
+                task.setGroup("documentation");
+                task.setDescription("Stages generated guide docs for upload as a GitHub Actions shard artifact.");
+                task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
+                task.getProjectManifest().convention(projectManifest);
+                task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("guide-docs-artifact"));
+                task.getShardIndex().convention(guideShardIndex);
+                task.getShardCount().convention(guideShardCount);
+                task.dependsOn(buildPlatformGuideDocs);
+                task.mustRunAfter(verifyPlatformAlignment);
             }
         );
 
@@ -97,6 +127,22 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             }
         );
 
+        TaskProvider<GeneratePlatformDocsTask> renderPlatformDocs = project.getTasks().register(
+            "renderPlatformDocs",
+            GeneratePlatformDocsTask.class,
+            task -> {
+                task.setGroup("documentation");
+                task.setDescription("Renders the single-page Micronaut documentation site from existing generated guide docs.");
+                task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
+                task.getPlatformVersionCatalog().convention(platformVersionCatalog);
+                task.getProjectManifest().convention(projectManifest);
+                task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("site"));
+                task.dependsOn(scanPlatformProjects);
+                task.dependsOn(verifyPlatformAlignment);
+                task.getOutputs().upToDateWhen(taskProvider -> false);
+            }
+        );
+
         TaskProvider<VerifyPlatformDocsTask> verifyPlatformDocs = project.getTasks().register(
             "verifyPlatformDocs",
             VerifyPlatformDocsTask.class,
@@ -106,6 +152,18 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getIndexFile().convention(generatePlatformDocs.flatMap(taskProvider -> taskProvider.getOutputDirectory().file("index.html")));
                 task.getProjectManifest().convention(projectManifest);
                 task.dependsOn(generatePlatformDocs);
+            }
+        );
+
+        project.getTasks().register(
+            "verifyRenderedPlatformDocs",
+            VerifyPlatformDocsTask.class,
+            task -> {
+                task.setGroup("verification");
+                task.setDescription("Checks the rendered documentation page without building guide docs.");
+                task.getIndexFile().convention(renderPlatformDocs.flatMap(taskProvider -> taskProvider.getOutputDirectory().file("index.html")));
+                task.getProjectManifest().convention(projectManifest);
+                task.dependsOn(renderPlatformDocs);
             }
         );
 

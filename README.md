@@ -42,6 +42,7 @@ build/site/
 - Non-test Gradle commands should use `-q`.
 - Network access is required when syncing missing submodules, fetching tags, and resolving GitHub repository metadata.
 - `GITHUB_TOKEN` or `GH_TOKEN` is optional locally, but recommended because `scanPlatformProjects` uses the GitHub API to resolve repository creation dates.
+- `PLATFORM_DOCS_GUIDE_SHARD_INDEX` and `PLATFORM_DOCS_GUIDE_SHARD_COUNT`, or the matching Gradle properties `platformDocs.guideShardIndex` and `platformDocs.guideShardCount`, select a guide-build shard for GitHub Actions matrix jobs.
 
 ```bash
 java -version
@@ -116,6 +117,18 @@ Open the generated page at:
 build/site/index.html
 ```
 
+For GitHub Actions, guide docs are built in independent shards and merged before rendering the final page. A single shard can be built and staged locally with:
+
+```bash
+./gradlew -q -PplatformDocs.guideShardIndex=0 -PplatformDocs.guideShardCount=8 verifyPlatformAlignment stagePlatformGuideDocsArtifact
+```
+
+The shard artifact is staged under `build/guide-docs-artifact` with paths that can be merged back into the repository root:
+
+```text
+build/guide-docs-artifact/repos/<project>/build/docs
+```
+
 ## Verification
 
 ```bash
@@ -137,8 +150,11 @@ build/site/index.html
 | `alignPlatformVersions` | Checks out each project submodule at the platform-managed release tag. | `repos/*` git state |
 | `verifyPlatformAlignment` | Verifies submodule HEAD tags match platform-managed versions. | No |
 | `buildPlatformGuideDocs` | Runs each submodule's `docs` task with Java 25. | `repos/*/build/docs` |
+| `stagePlatformGuideDocsArtifact` | Stages generated guide docs for a selected shard. | `build/guide-docs-artifact` |
+| `renderPlatformDocs` | Renders the single-page site from existing generated guide docs. | `build/site` |
 | `generatePlatformDocs` | Builds guide docs and renders the single-page platform site. | `build/site` |
 | `verifyPlatformDocs` | Verifies generated HTML and required static assets. | No |
+| `verifyRenderedPlatformDocs` | Verifies a site rendered from prebuilt guide docs. | No |
 | `check` | Runs platform alignment and generated site verification. | Depends on generated docs |
 | `cM` | Micronaut-style aggregate verification alias. | Depends on `check` |
 
@@ -146,19 +162,15 @@ build/site/index.html
 
 The `Platform Docs` GitHub Actions workflow lives at `.github/workflows/platform-docs.yml`. It runs on pushes to `main` and can also be started manually from the Actions tab.
 
-The build job:
+The workflow uses GitHub Actions matrix parallelism rather than parallel Gradle workers in one runner:
 
-- checks out the repository with submodules
-- installs Java 25
-- configures Gradle
-- exposes the Actions-provided token as `GITHUB_TOKEN` for authenticated GitHub API calls
-- runs the same Gradle workflow used locally
+- eight `build-guides` jobs run at the same time, one for each shard
+- each shard checks out submodules, installs Java 25, verifies platform alignment, builds only its selected projects, and uploads `build/guide-docs-artifact`
+- the `render` job downloads and merges all shard artifacts, renders `build/site`, verifies the rendered page, and uploads the GitHub Pages artifact
 
 ```bash
-./gradlew -q scanPlatformProjects
-./gradlew -q syncPlatformProjectSubmodules
-./gradlew -q alignPlatformVersions
-./gradlew -q generatePlatformDocs
+./gradlew -q verifyPlatformAlignment stagePlatformGuideDocsArtifact
+./gradlew -q verifyRenderedPlatformDocs
 ```
 
 The workflow uploads `build/site` twice:

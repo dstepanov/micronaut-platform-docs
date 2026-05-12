@@ -1,0 +1,95 @@
+package io.micronaut.docs;
+
+import org.gradle.api.DefaultTask;
+import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.TaskAction;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
+import java.util.List;
+
+public abstract class StageGuideDocsArtifactTask extends DefaultTask {
+
+    @Internal
+    public abstract DirectoryProperty getProjectDirectory();
+
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getProjectManifest();
+
+    @OutputDirectory
+    public abstract DirectoryProperty getOutputDirectory();
+
+    @Input
+    public abstract Property<Integer> getShardIndex();
+
+    @Input
+    public abstract Property<Integer> getShardCount();
+
+    @TaskAction
+    public void stage() throws IOException {
+        Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
+        Path outputDirectory = getOutputDirectory().get().getAsFile().toPath();
+        int shardIndex = getShardIndex().getOrElse(0);
+        int shardCount = getShardCount().getOrElse(1);
+        List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
+        List<GuideProject> selectedProjects = GuideProject.shard(projects, shardIndex, shardCount);
+
+        deleteDirectory(outputDirectory);
+        Files.createDirectories(outputDirectory);
+        getLogger().quiet(
+            "Staging guide docs artifact for {} of {} projects (shard {}/{}).",
+            selectedProjects.size(),
+            projects.size(),
+            shardIndex + 1,
+            shardCount
+        );
+
+        int index = 0;
+        for (GuideProject project : selectedProjects) {
+            Path sourceDirectory = projectDirectory.resolve(project.generatedDocsPath());
+            if (!Files.isDirectory(sourceDirectory)) {
+                throw new IOException("Missing generated docs directory for " + project.displayName() + ": " + sourceDirectory);
+            }
+            Path targetDirectory = outputDirectory.resolve(project.generatedDocsPath());
+            getLogger().quiet("[{}/{}] Staging {} docs.", ++index, selectedProjects.size(), project.displayName());
+            copyDirectory(sourceDirectory, targetDirectory);
+        }
+    }
+
+    private static void copyDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
+        try (var stream = Files.walk(sourceDirectory)) {
+            for (Path source : stream.toList()) {
+                Path target = targetDirectory.resolve(sourceDirectory.relativize(source).toString());
+                if (Files.isDirectory(source)) {
+                    Files.createDirectories(target);
+                } else {
+                    Files.createDirectories(target.getParent());
+                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+    }
+
+    private static void deleteDirectory(Path directory) throws IOException {
+        if (!Files.exists(directory)) {
+            return;
+        }
+        try (var stream = Files.walk(directory)) {
+            for (Path path : stream.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
+            }
+        }
+    }
+}

@@ -3,6 +3,8 @@ package io.micronaut.docs;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Internal;
@@ -26,6 +28,12 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getProjectManifest();
 
+    @Input
+    public abstract Property<Integer> getShardIndex();
+
+    @Input
+    public abstract Property<Integer> getShardCount();
+
     @TaskAction
     public void buildDocs() throws IOException, InterruptedException {
         String javaVersion = System.getProperty("java.specification.version");
@@ -36,9 +44,20 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
         Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
         String javaHome = System.getProperty("java.home");
         List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
-        getLogger().quiet("Building guide docs for {} projects with Java {} from {}.", projects.size(), javaVersion, javaHome);
+        int shardIndex = getShardIndex().getOrElse(0);
+        int shardCount = getShardCount().getOrElse(1);
+        List<GuideProject> selectedProjects = GuideProject.shard(projects, shardIndex, shardCount);
+        getLogger().quiet(
+            "Building guide docs for {} of {} projects with Java {} from {} (shard {}/{}).",
+            selectedProjects.size(),
+            projects.size(),
+            javaVersion,
+            javaHome,
+            shardIndex + 1,
+            shardCount
+        );
         int index = 0;
-        for (GuideProject project : projects) {
+        for (GuideProject project : selectedProjects) {
             Path submoduleDirectory = projectDirectory.resolve(project.submodulePath());
             if (!Files.isDirectory(submoduleDirectory)) {
                 throw new IOException("Missing submodule for " + project.displayName() + ": " + submoduleDirectory
@@ -49,7 +68,7 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
             }
             int current = ++index;
             long startedAt = System.nanoTime();
-            getLogger().quiet("[{}/{}] Building {} docs.", current, projects.size(), project.displayName());
+            getLogger().quiet("[{}/{}] Building {} docs.", current, selectedProjects.size(), project.displayName());
             ProcessBuilder processBuilder = new ProcessBuilder("./gradlew", "-q", "-Dorg.gradle.vfs.watch=false", "docs")
                 .directory(submoduleDirectory.toFile())
                 .inheritIO();
@@ -59,9 +78,9 @@ public abstract class BuildGuideDocsTask extends DefaultTask {
             if (exitCode != 0) {
                 throw new GradleException("Failed to build " + project.displayName() + " docs. Exit code: " + exitCode);
             }
-            getLogger().quiet("[{}/{}] Built {} docs in {}.", current, projects.size(), project.displayName(), durationSince(startedAt));
+            getLogger().quiet("[{}/{}] Built {} docs in {}.", current, selectedProjects.size(), project.displayName(), durationSince(startedAt));
         }
-        getLogger().quiet("Built guide docs for {} projects.", projects.size());
+        getLogger().quiet("Built guide docs for {} projects in shard {}/{}.", selectedProjects.size(), shardIndex + 1, shardCount);
     }
 
     private static String durationSince(long startedAt) {
