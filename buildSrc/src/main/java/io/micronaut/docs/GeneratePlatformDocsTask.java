@@ -28,6 +28,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -84,6 +85,15 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
                 margin: 0 !important;
                 padding: 24px !important;
             }
+
+            tr:target {
+                outline: 2px solid #00a676;
+                outline-offset: -2px;
+            }
+
+            tr:target td {
+                background: rgba(0, 166, 118, 0.12) !important;
+            }
         </style>
         """;
     private static final Pattern TITLE = Pattern.compile("<title>(.*?)</title>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
@@ -94,6 +104,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final Pattern URL_ATTRIBUTE = Pattern.compile("\\b(href|src)\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern IMG_TAG = Pattern.compile("<img\\b[^>]*>", Pattern.CASE_INSENSITIVE);
     private static final Pattern PARAGRAPH_TAG = Pattern.compile("<p\\b[^>]*>(.*?)</p>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern CONFIGURATION_PROPERTY_ROW = Pattern.compile("<tr(\\b[^>]*)>\\s*(<td\\b[^>]*>\\s*<p\\b[^>]*>\\s*<code>(.*?)</code>\\s*</p>\\s*</td>)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_TAG = Pattern.compile("<svg\\b([^>]*)>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_CLASS = Pattern.compile("\\bclass\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
 
@@ -153,7 +164,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
 
         getLogger().quiet("Writing platform UI assets.");
-        writeSiteAssets(outputDirectory, documents);
+        writeSiteAssets(outputDirectory, projectDirectory, documents, descriptions);
         Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents, descriptions)), StandardCharsets.UTF_8);
         getLogger().quiet("Generated platform docs site: {}", outputDirectory.resolve("index.html"));
     }
@@ -250,7 +261,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
                     if (isEmbeddedReferenceHtml(relativePath)) {
                         Files.writeString(
                             target,
-                            injectEmbeddedReferenceStyle(Files.readString(source, StandardCharsets.UTF_8)),
+                            transformEmbeddedReferenceHtml(relativePath, Files.readString(source, StandardCharsets.UTF_8)),
                             StandardCharsets.UTF_8
                         );
                     } else {
@@ -266,12 +277,37 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             || relativePath.startsWith("api/") && relativePath.endsWith(".html");
     }
 
+    private static String transformEmbeddedReferenceHtml(String relativePath, String html) {
+        String transformed = html;
+        if (relativePath.equals("guide/configurationreference.html")) {
+            transformed = injectConfigurationPropertyAnchors(transformed);
+        }
+        return injectEmbeddedReferenceStyle(transformed);
+    }
+
     private static String injectEmbeddedReferenceStyle(String html) {
         int headEnd = html.indexOf("</head>");
         if (headEnd < 0) {
             return html;
         }
         return html.substring(0, headEnd) + EMBEDDED_REFERENCE_STYLE + html.substring(headEnd);
+    }
+
+    private static String injectConfigurationPropertyAnchors(String html) {
+        Matcher matcher = CONFIGURATION_PROPERTY_ROW.matcher(html);
+        StringBuilder result = new StringBuilder(html.length() + 1024);
+        while (matcher.find()) {
+            String attributes = matcher.group(1);
+            if (hasAttribute("<tr" + attributes + ">", "id")) {
+                matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group()));
+                continue;
+            }
+            String propertyName = normalizePlainText(stripTags(matcher.group(3)));
+            String replacement = "<tr" + attributes + " id=\"" + escapeAttribute(configurationPropertyAnchor(propertyName)) + "\">" + matcher.group(2);
+            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     private static boolean isGeneratedDocsThemeAsset(String relativePath) {
@@ -477,11 +513,18 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return Math.min(queryIndex, hashIndex);
     }
 
-    private static void writeSiteAssets(Path outputDirectory, List<GuideDocument> documents) throws IOException {
+    private static void writeSiteAssets(Path outputDirectory, Path projectDirectory, List<GuideDocument> documents, Properties descriptions) throws IOException {
         Path siteAssets = outputDirectory.resolve(SITE_ASSET_PATH);
         Files.createDirectories(siteAssets);
         Files.writeString(siteAssets.resolve("site.css"), resourceText(SITE_CSS_RESOURCE), StandardCharsets.UTF_8);
         Files.writeString(siteAssets.resolve("site.js"), renderTemplate("assets/site.js", scriptModel(documents)), StandardCharsets.UTF_8);
+        String searchIndexJson = searchIndexJson(projectDirectory, documents, descriptions);
+        Files.writeString(siteAssets.resolve("search-index.json"), searchIndexJson, StandardCharsets.UTF_8);
+        Files.writeString(
+            siteAssets.resolve("search-index.js"),
+            "window.__PLATFORM_SEARCH_INDEX__=" + searchIndexJson + ";\n",
+            StandardCharsets.UTF_8
+        );
         copyResource(LOGO_BLACK_RESOURCE, siteAssets.resolve("logos/micronaut-horizontal-black.svg"));
         copyResource(LOGO_WHITE_RESOURCE, siteAssets.resolve("logos/micronaut-horizontal-white.svg"));
     }
@@ -574,6 +617,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         icons.put("minimize2", lucideIcon("minimize-2", "trigger-icon"));
         icons.put("moon", lucideIcon("moon", "theme-icon-svg"));
         icons.put("panelLeft", lucideIcon("panel-left", "trigger-icon"));
+        icons.put("search", lucideIcon("search", "search-icon"));
         icons.put("slidersHorizontal", lucideIcon("sliders-horizontal", "badge-icon"));
         icons.put("sun", lucideIcon("sun", "theme-icon-svg"));
         icons.put("x", lucideIcon("x", "trigger-icon"));
@@ -630,7 +674,185 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static Map<String, Object> scriptModel(List<GuideDocument> documents) {
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("firstSections", firstSectionModels(documents));
+        model.put("searchIndexUrl", SITE_ASSET_PATH + "/search-index.json");
+        model.put("searchIndexScriptUrl", SITE_ASSET_PATH + "/search-index.js");
         return model;
+    }
+
+    private static String searchIndexJson(Path projectDirectory, List<GuideDocument> documents, Properties descriptions) throws IOException {
+        List<SearchItem> items = new ArrayList<>();
+        for (GuideDocument document : documents) {
+            GuideProject project = document.project();
+            ProjectDescription description = projectDescription(projectDirectory, document, descriptions);
+            String firstSection = firstFragment(document);
+            items.add(new SearchItem(
+                "project",
+                project.slug(),
+                project.displayName(),
+                project.displayName(),
+                firstSection,
+                "Project",
+                project.displayName() + " " + project.slug() + " " + description.shortDescription() + " " + description.longDescription(),
+                ""
+            ));
+            for (TocItem item : document.tocItems()) {
+                String number = normalizePlainText(stripTags(item.numberHtml()));
+                String title = normalizePlainText(stripTags(item.titleHtml()));
+                items.add(new SearchItem(
+                    "section",
+                    project.slug(),
+                    project.displayName(),
+                    searchResultTitle(project, title),
+                    item.prefixedId(),
+                    project.displayName(),
+                    project.displayName() + " " + project.slug() + " " + number + " " + title,
+                    ""
+                ));
+            }
+            String configurationReferencePath = generatedDocumentPath(projectDirectory, project, "guide/configurationreference.html");
+            if (!configurationReferencePath.isBlank()) {
+                Path configurationReferenceFile = projectDirectory.resolve(project.generatedDocsPath()).resolve("guide/configurationreference.html");
+                for (ConfigurationProperty property : configurationProperties(configurationReferenceFile)) {
+                    items.add(new SearchItem(
+                        "configuration",
+                        project.slug(),
+                        project.displayName(),
+                        property.name(),
+                        firstSection,
+                        "Configuration property",
+                        project.displayName() + " " + project.slug() + " " + property.name() + " " + property.description(),
+                        configurationReferencePath + "#" + property.anchor()
+                    ));
+                }
+            }
+        }
+
+        Map<String, LinkedHashSet<Integer>> terms = new LinkedHashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            for (String token : searchTokens(items.get(i).searchText())) {
+                addSearchTerm(terms, token, i);
+                int prefixLength = Math.min(token.length(), 20);
+                for (int length = 2; length < prefixLength; length++) {
+                    addSearchTerm(terms, token.substring(0, length), i);
+                }
+            }
+        }
+
+        StringBuilder json = new StringBuilder(1024 * 64);
+        json.append("{\"items\":[");
+        for (int i = 0; i < items.size(); i++) {
+            SearchItem item = items.get(i);
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append('{')
+                .append("\"kind\":\"").append(jsonString(item.kind())).append("\",")
+                .append("\"project\":\"").append(jsonString(item.project())).append("\",")
+                .append("\"projectTitle\":\"").append(jsonString(item.projectTitle())).append("\",")
+                .append("\"title\":\"").append(jsonString(item.title())).append("\",")
+                .append("\"href\":\"#").append(jsonString(item.section())).append("\",")
+                .append("\"detail\":\"").append(jsonString(item.detail())).append("\",")
+                .append("\"referenceUrl\":\"").append(jsonString(item.referenceUrl())).append("\"")
+                .append('}');
+        }
+        json.append("],\"terms\":{");
+        int termIndex = 0;
+        for (Map.Entry<String, LinkedHashSet<Integer>> entry : terms.entrySet()) {
+            if (termIndex++ > 0) {
+                json.append(',');
+            }
+            json.append('"').append(jsonString(entry.getKey())).append("\":[");
+            int idIndex = 0;
+            for (Integer id : entry.getValue()) {
+                if (idIndex++ > 0) {
+                    json.append(',');
+                }
+                json.append(id);
+            }
+            json.append(']');
+        }
+        json.append("}}");
+        return json.toString();
+    }
+
+    private static void addSearchTerm(Map<String, LinkedHashSet<Integer>> terms, String term, int itemIndex) {
+        terms.computeIfAbsent(term, ignored -> new LinkedHashSet<>()).add(itemIndex);
+    }
+
+    private static List<ConfigurationProperty> configurationProperties(Path configurationReferenceFile) throws IOException {
+        if (!Files.isRegularFile(configurationReferenceFile)) {
+            return List.of();
+        }
+        String html = Files.readString(configurationReferenceFile, StandardCharsets.UTF_8);
+        Map<String, ConfigurationProperty> properties = new LinkedHashMap<>();
+        Matcher matcher = CONFIGURATION_PROPERTY_ROW.matcher(html);
+        while (matcher.find()) {
+            String name = normalizePlainText(stripTags(matcher.group(3)));
+            if (name.isBlank()) {
+                continue;
+            }
+            properties.putIfAbsent(name, new ConfigurationProperty(name, configurationPropertyAnchor(name), ""));
+        }
+        return List.copyOf(properties.values());
+    }
+
+    private static String searchResultTitle(GuideProject project, String title) {
+        String projectName = project.displayName();
+        if (title.regionMatches(true, 0, projectName + " ", 0, projectName.length() + 1)) {
+            return title.substring(projectName.length()).trim();
+        }
+        return title;
+    }
+
+    private static String configurationPropertyAnchor(String propertyName) {
+        String anchor = normalizePlainText(propertyName)
+            .toLowerCase(Locale.ROOT)
+            .replaceAll("[^a-z0-9]+", "-")
+            .replaceAll("(^-+|-+$)", "");
+        return anchor.isBlank() ? "configuration-property" : "configuration-property-" + anchor;
+    }
+
+    private static List<String> searchTokens(String value) {
+        String normalized = normalizePlainText(value).toLowerCase(Locale.ROOT);
+        LinkedHashSet<String> tokens = new LinkedHashSet<>();
+        addSearchTokens(tokens, normalized.replaceAll("[^a-z0-9]+", " "));
+        String compact = normalized.replaceAll("[^a-z0-9]+", "");
+        if (compact.length() > 1 && compact.length() <= 40) {
+            tokens.add(compact);
+        }
+        return List.copyOf(tokens);
+    }
+
+    private static void addSearchTokens(LinkedHashSet<String> tokens, String value) {
+        for (String token : value.split("\\s+")) {
+            if (token.length() > 1) {
+                tokens.add(token);
+            }
+        }
+    }
+
+    private static String jsonString(String value) {
+        StringBuilder escaped = new StringBuilder(value.length() + 16);
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            switch (character) {
+                case '"' -> escaped.append("\\\"");
+                case '\\' -> escaped.append("\\\\");
+                case '\b' -> escaped.append("\\b");
+                case '\f' -> escaped.append("\\f");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                default -> {
+                    if (character < 0x20) {
+                        escaped.append("\\u").append(String.format("%04x", (int) character));
+                    } else {
+                        escaped.append(character);
+                    }
+                }
+            }
+        }
+        return escaped.toString();
     }
 
     private static List<Map<String, Object>> documentModels(Path projectDirectory, List<GuideDocument> documents, Properties descriptions) {
@@ -944,6 +1166,21 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     }
 
     private record ProjectDescription(String shortDescription, String longDescription) {
+    }
+
+    private record SearchItem(
+        String kind,
+        String project,
+        String projectTitle,
+        String title,
+        String section,
+        String detail,
+        String searchText,
+        String referenceUrl
+    ) {
+    }
+
+    private record ConfigurationProperty(String name, String anchor, String description) {
     }
 
     private record TocItem(int level, String numberHtml, String titleHtml, String originalId, String prefixedId) {

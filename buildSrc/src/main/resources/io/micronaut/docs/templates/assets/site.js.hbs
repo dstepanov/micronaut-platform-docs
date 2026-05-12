@@ -6,6 +6,8 @@ const firstSections = {
 const projectSlugs = Object.keys(firstSections);
 const projectSlugsByLength = [...projectSlugs].sort((left, right) => right.length - left.length);
 const overviewHash = "platform";
+const searchIndexUrl = "{{{searchIndexUrl}}}";
+const searchIndexScriptUrl = "{{{searchIndexScriptUrl}}}";
 const overviewPage = document.querySelector("[data-overview]");
 const projectOptions = Array.from(document.querySelectorAll("[data-project-option]"));
 const sidebarCollapse = document.querySelector(".sidebar-collapse");
@@ -13,6 +15,10 @@ const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-labe
 const sidebarToggle = document.querySelector(".sidebar-toggle");
 const sidebarContent = document.querySelector(".sidebar-content");
 const themeSwitcher = document.querySelector("[data-theme-switcher]");
+const searchRoot = document.querySelector("[data-search]");
+const searchInput = document.querySelector("[data-search-input]");
+const searchClear = document.querySelector("[data-search-clear]");
+const searchResults = document.querySelector("[data-search-results]");
 const referenceOverlay = document.querySelector("[data-reference-overlay]");
 const referencePanel = document.querySelector("[data-reference-panel]");
 const referenceFrame = document.querySelector("[data-reference-frame]");
@@ -25,14 +31,18 @@ const projectSections = new Map(projectOptions.map((summary) => {
     const section = summary.closest("[data-project-nav]");
     return [section.dataset.projectNav, { section, summary, article: projectArticles.get(section.dataset.projectNav) }];
 }));
-const themeStorageKey = "theme";
 const headingCache = new Map();
 let activeSectionId = "";
 let activeLink;
 let activeReferenceButton;
 let activeReferenceKind = "";
+let focusedSearchTarget;
 let scrollSpyFrame = 0;
 let contentScrollFrame = 0;
+let searchIndexPromise;
+let searchFrame = 0;
+let searchActiveIndex = -1;
+let themeManuallySelected = false;
 
 function copyText(element) {
     let range;
@@ -60,29 +70,322 @@ window.copyToClipboard = function copyToClipboard(element) {
     }
 };
 
-function storedTheme() {
-    try {
-        if (window.localStorage) {
-            return localStorage.getItem(themeStorageKey);
-        }
-    } catch (e) {
-        return null;
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll("\"", "&quot;");
+}
+
+function normalizeSearchText(value) {
+    return String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+}
+
+function searchTokens(value) {
+    return normalizeSearchText(value)
+        .split(/\s+/)
+        .filter((token) => token.length > 1)
+        .slice(0, 6);
+}
+
+function updateSearchUiState() {
+    const hasValue = Boolean(searchInput?.value);
+    const hasResults = Boolean(searchResults && !searchResults.hidden);
+    const active = Boolean(searchRoot && searchRoot.contains(document.activeElement));
+    if (searchClear) {
+        searchClear.hidden = !hasValue;
+        searchClear.setAttribute("aria-hidden", String(!hasValue));
+        searchClear.tabIndex = hasValue ? 0 : -1;
     }
-    return null;
+    if (searchRoot) {
+        searchRoot.classList.toggle("has-value", hasValue);
+        searchRoot.classList.toggle("has-results", hasResults);
+        searchRoot.classList.toggle("is-active", active);
+    }
+}
+
+function stripSearchSectionNumber(value) {
+    return String(value || "")
+        .replace(/^\s*\d+(?:\.\d+)*\s+/, "")
+        .trim();
+}
+
+function searchDisplayTitle(projectTitle, title) {
+    const normalizedTitle = stripSearchSectionNumber(title);
+    const prefix = String(projectTitle || "").trim();
+    if (prefix && normalizedTitle.toLowerCase().startsWith((prefix + " ").toLowerCase())) {
+        return normalizedTitle.slice(prefix.length).trim();
+    }
+    return normalizedTitle;
+}
+
+function addSearchIndexTerms(index, itemId, value) {
+    const tokens = normalizeSearchText(value)
+        .split(/\s+/)
+        .filter((token) => token.length > 1);
+    const allTerms = new Set();
+    for (const token of tokens) {
+        const prefixLength = Math.min(token.length, 20);
+        allTerms.add(token);
+        for (let length = 2; length < prefixLength; length++) {
+            allTerms.add(token.slice(0, length));
+        }
+    }
+    for (const term of allTerms) {
+        if (!index.terms[term]) {
+            index.terms[term] = [];
+        }
+        index.terms[term].push(itemId);
+    }
+}
+
+function buildSidebarSearchIndex() {
+    const index = { items: [], terms: {} };
+    for (const [project, data] of projectSections.entries()) {
+        const projectTitle = data.summary.querySelector(".project-title")?.textContent?.trim() || project;
+        const firstSection = firstSections[project] || project;
+        const projectItem = {
+            kind: "project",
+            project,
+            projectTitle,
+            title: projectTitle,
+            href: "#" + firstSection,
+            detail: "Project"
+        };
+        index.items.push(projectItem);
+        addSearchIndexTerms(index, index.items.length - 1, project + " " + projectTitle);
+
+        const links = Array.from(data.section.querySelectorAll(".toc a[href^='#']"));
+        for (const link of links) {
+            const title = link.querySelector(".toc-title")?.textContent?.trim()
+                || stripSearchSectionNumber(link.textContent.replace(/\s+/g, " "));
+            const sectionItem = {
+                kind: "section",
+                project,
+                projectTitle,
+                title,
+                href: link.getAttribute("href"),
+                detail: projectTitle
+            };
+            index.items.push(sectionItem);
+            addSearchIndexTerms(index, index.items.length - 1, project + " " + projectTitle + " " + title);
+        }
+    }
+    return index;
+}
+
+function loadSearchIndex() {
+    if (!searchIndexPromise) {
+        if (window.__PLATFORM_SEARCH_INDEX__) {
+            searchIndexPromise = Promise.resolve(window.__PLATFORM_SEARCH_INDEX__);
+        } else if (window.location.protocol === "file:") {
+            searchIndexPromise = loadSearchIndexScript().catch(() => buildSidebarSearchIndex());
+        } else {
+            searchIndexPromise = fetch(searchIndexUrl, { cache: "no-cache" })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error("Unable to load search index");
+                    }
+                    return response.json();
+                })
+                .catch(() => buildSidebarSearchIndex());
+        }
+    }
+    return searchIndexPromise;
+}
+
+function loadSearchIndexScript() {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = searchIndexScriptUrl;
+        script.async = true;
+        script.onload = () => {
+            if (window.__PLATFORM_SEARCH_INDEX__) {
+                resolve(window.__PLATFORM_SEARCH_INDEX__);
+            } else {
+                reject(new Error("Search index script did not define an index"));
+            }
+        };
+        script.onerror = () => reject(new Error("Unable to load search index script"));
+        document.head.appendChild(script);
+    });
+}
+
+function closeSearchResults() {
+    if (searchResults) {
+        searchResults.hidden = true;
+        searchResults.innerHTML = "";
+    }
+    searchActiveIndex = -1;
+    updateSearchUiState();
+}
+
+function setSearchActive(index) {
+    const links = Array.from(searchResults?.querySelectorAll("[data-search-result]") || []);
+    if (!links.length) {
+        searchActiveIndex = -1;
+        return;
+    }
+    searchActiveIndex = Math.max(0, Math.min(index, links.length - 1));
+    links.forEach((link, linkIndex) => {
+        link.classList.toggle("active", linkIndex === searchActiveIndex);
+        link.setAttribute("aria-selected", String(linkIndex === searchActiveIndex));
+    });
+    links[searchActiveIndex]?.scrollIntoView({ block: "nearest" });
+}
+
+function scoreSearchResult(item, tokens, queryText, matchedTokenCount) {
+    const title = normalizeSearchText(item.title);
+    const project = normalizeSearchText(item.projectTitle);
+    const detail = normalizeSearchText(item.detail);
+    let score = matchedTokenCount * 100;
+    if (title === queryText) {
+        score += 90;
+    } else if (title.startsWith(queryText)) {
+        score += 70;
+    } else if (title.includes(queryText)) {
+        score += 45;
+    }
+    if (project === queryText) {
+        score += 60;
+    } else if (project.startsWith(queryText)) {
+        score += 35;
+    } else if (project.includes(queryText)) {
+        score += 20;
+    }
+    if (detail.includes(queryText)) {
+        score += 8;
+    }
+    if (item.kind === "project") {
+        score += 72;
+    } else if (item.kind === "configuration") {
+        score += 24;
+    }
+    for (const token of tokens) {
+        if (title.startsWith(token)) {
+            score += 10;
+        }
+    }
+    return score;
+}
+
+function findSearchResults(index, query) {
+    const tokens = searchTokens(query);
+    if (!tokens.length) {
+        return [];
+    }
+    const counts = new Map();
+    for (const token of tokens) {
+        const ids = index.terms[token] || [];
+        for (const id of ids) {
+            counts.set(id, (counts.get(id) || 0) + 1);
+        }
+    }
+    const requiredMatches = tokens.length;
+    let matches = Array.from(counts.entries()).filter((entry) => entry[1] === requiredMatches);
+    if (!matches.length && query.trim().length >= 3) {
+        matches = Array.from(counts.entries()).filter((entry) => entry[1] > 0);
+    }
+    const queryText = normalizeSearchText(query);
+    return matches
+        .map(([id, matchedTokenCount]) => {
+            const item = index.items[id];
+            return {
+                item,
+                score: scoreSearchResult(item, tokens, queryText, matchedTokenCount)
+            };
+        })
+        .sort((left, right) => right.score - left.score || left.item.title.localeCompare(right.item.title))
+        .slice(0, 12)
+        .map((result) => result.item);
+}
+
+function renderSearchResults(results, query) {
+    if (!searchResults) {
+        return;
+    }
+    if (!query.trim() || query.trim().length < 2) {
+        closeSearchResults();
+        return;
+    }
+    searchResults.hidden = false;
+    searchActiveIndex = -1;
+    if (!results.length) {
+        searchResults.innerHTML = "<div class=\"site-search-empty\">No results</div>";
+        updateSearchUiState();
+        return;
+    }
+    searchResults.innerHTML = results.map((item) => {
+        const isProject = item.kind === "project";
+        const isConfiguration = item.kind === "configuration";
+        const projectAttribute = isProject ? " data-search-project-link" : "";
+        const referenceAttribute = item.referenceUrl
+            ? ` data-search-reference-url="${escapeHtml(item.referenceUrl)}" data-search-reference-kind="configuration" data-search-project="${escapeHtml(item.project)}"`
+            : "";
+        const resultLabel = isProject ? "Project" : item.projectTitle;
+        const resultDetail = isProject ? "Project documentation" : isConfiguration ? "Configuration property" : "Documentation section";
+        const resultTitle = isProject || isConfiguration ? item.title : searchDisplayTitle(item.projectTitle, item.title);
+        return `
+            <a class="site-search-result" href="${escapeHtml(item.href)}" data-search-result${projectAttribute}${referenceAttribute} aria-selected="false">
+                <span class="site-search-result-kind">${escapeHtml(resultLabel)}</span>
+                <strong>${escapeHtml(resultTitle)}</strong>
+                <small>${escapeHtml(resultDetail)}</small>
+            </a>
+        `;
+    }).join("");
+    updateSearchUiState();
+}
+
+function runSearch() {
+    const query = searchInput?.value || "";
+    updateSearchUiState();
+    if (query.trim().length < 2) {
+        closeSearchResults();
+        return;
+    }
+    if (searchResults) {
+        searchResults.hidden = false;
+        searchResults.innerHTML = "<div class=\"site-search-empty\">Loading...</div>";
+        updateSearchUiState();
+    }
+    loadSearchIndex()
+        .then((index) => {
+            if ((searchInput?.value || "") !== query) {
+                return;
+            }
+            renderSearchResults(findSearchResults(index, query), query);
+        })
+        .catch(() => {
+            if (searchResults) {
+                searchResults.hidden = false;
+                searchResults.innerHTML = "<div class=\"site-search-empty\">Search index unavailable</div>";
+                updateSearchUiState();
+            }
+        });
+}
+
+function queueSearch() {
+    if (searchFrame) {
+        window.cancelAnimationFrame(searchFrame);
+    }
+    searchFrame = window.requestAnimationFrame(() => {
+        searchFrame = 0;
+        runSearch();
+    });
 }
 
 function preferredTheme() {
-    const theme = storedTheme();
-    if (theme === "dark" || theme === "light") {
-        return theme;
-    }
     if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
         return "dark";
     }
     return "light";
 }
 
-function applyTheme(theme, persist) {
+function applyTheme(theme) {
     const dark = theme === "dark";
     document.body.classList.toggle("dark-mode", dark);
     if (themeSwitcher) {
@@ -91,17 +394,11 @@ function applyTheme(theme, persist) {
         themeSwitcher.setAttribute("aria-pressed", String(dark));
         themeSwitcher.setAttribute("title", label);
     }
-    try {
-        if (persist && window.localStorage) {
-            localStorage.setItem(themeStorageKey, dark ? "dark" : "light");
-        }
-    } catch (e) {
-        return;
-    }
 }
 
-function switchTheme(persist) {
-    applyTheme(document.body.classList.contains("dark-mode") ? "light" : "dark", persist);
+function switchTheme() {
+    themeManuallySelected = true;
+    applyTheme(document.body.classList.contains("dark-mode") ? "light" : "dark");
 }
 
 window.switchTheme = switchTheme;
@@ -176,12 +473,40 @@ function scrollProjectSubmenu(section) {
     });
 }
 
-function scrollToElementNow(target) {
+function focusSearchTarget(target) {
+    if (focusedSearchTarget && focusedSearchTarget !== target) {
+        focusedSearchTarget.classList.remove("platform-search-target");
+    }
+    focusedSearchTarget = target;
     if (!target) {
+        return;
+    }
+    target.classList.add("platform-search-target");
+    if (!target.hasAttribute("tabindex")) {
+        target.setAttribute("tabindex", "-1");
+    }
+    target.focus({ preventScroll: true });
+}
+
+function scrollToElementNow(target, options) {
+    if (!target) {
+        return;
+    }
+    const settings = options || {};
+    if (settings.block === "center") {
+        target.scrollIntoView({
+            block: "center",
+            inline: "nearest",
+            behavior: "auto"
+        });
+        if (settings.focus) {
+            focusSearchTarget(target);
+        }
         return;
     }
     target.scrollIntoView({
         block: "start",
+        inline: "nearest",
         behavior: "auto"
     });
     const topbarHeight = document.querySelector(".topbar")?.getBoundingClientRect().height ?? 0;
@@ -196,37 +521,37 @@ function scrollToElementNow(target) {
     });
 }
 
-function scrollToSectionNow(sectionId) {
-    scrollToElementNow(document.getElementById(sectionId));
+function scrollToSectionNow(sectionId, options) {
+    scrollToElementNow(document.getElementById(sectionId), options);
 }
 
-function scrollToProjectTitleNow(project) {
+function scrollToProjectTitleNow(project, options) {
     const article = projectSections.get(project)?.article;
-    scrollToElementNow(article);
+    scrollToElementNow(article, options);
 }
 
-function scrollToSection(sectionId) {
+function scrollToSection(sectionId, options) {
     if (contentScrollFrame) {
         window.cancelAnimationFrame(contentScrollFrame);
     }
     contentScrollFrame = window.requestAnimationFrame(() => {
         contentScrollFrame = window.requestAnimationFrame(() => {
             contentScrollFrame = 0;
-            scrollToSectionNow(sectionId);
+            scrollToSectionNow(sectionId, options);
             refreshActiveLink(sectionId);
             queueScrollSpy();
         });
     });
 }
 
-function scrollToProjectTitle(project, activeSectionIdForProject) {
+function scrollToProjectTitle(project, activeSectionIdForProject, options) {
     if (contentScrollFrame) {
         window.cancelAnimationFrame(contentScrollFrame);
     }
     contentScrollFrame = window.requestAnimationFrame(() => {
         contentScrollFrame = window.requestAnimationFrame(() => {
             contentScrollFrame = 0;
-            scrollToProjectTitleNow(project);
+            scrollToProjectTitleNow(project, options);
             refreshActiveLink(activeSectionIdForProject);
             queueScrollSpy();
         });
@@ -243,11 +568,12 @@ function setReferenceExpanded(expanded) {
     }
 }
 
-function openReference(button) {
+function openReference(button, options) {
     if (!referencePanel || !referenceFrame || !button) {
         return;
     }
-    const url = button.dataset.referenceUrl;
+    const settings = options || {};
+    const url = settings.url || button.dataset.referenceUrl;
     if (!url) {
         return;
     }
@@ -262,8 +588,8 @@ function openReference(button) {
     if (referenceOverlay) {
         referenceOverlay.hidden = false;
     }
-    const title = button.dataset.referenceTitle || "Reference";
-    const projectName = button.dataset.referenceProjectName || "";
+    const title = settings.title || button.dataset.referenceTitle || "Reference";
+    const projectName = settings.projectName || button.dataset.referenceProjectName || "";
     if (referenceTitle) {
         referenceTitle.textContent = title;
     }
@@ -277,6 +603,73 @@ function openReference(button) {
         referenceFrame.src = url;
     }
     referenceFrame.title = projectName ? projectName + " " + title : title;
+    focusReferenceTarget(url);
+}
+
+function referenceTargetId(url) {
+    const hashIndex = String(url || "").indexOf("#");
+    if (hashIndex < 0) {
+        return "";
+    }
+    return decodeURIComponent(String(url).slice(hashIndex + 1));
+}
+
+function installReferenceTargetStyles(document) {
+    if (!document?.head || document.getElementById("platform-reference-target-style")) {
+        return;
+    }
+    const style = document.createElement("style");
+    style.id = "platform-reference-target-style";
+    style.textContent = `
+        .platform-reference-target > td {
+            background: rgba(0, 166, 118, 0.14) !important;
+            box-shadow: inset 3px 0 0 #00a676;
+        }
+        .platform-reference-target:focus {
+            outline: 2px solid rgba(0, 166, 118, 0.42);
+            outline-offset: 2px;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function focusReferenceTarget(url) {
+    const targetId = referenceTargetId(url);
+    if (!targetId || !referenceFrame) {
+        return;
+    }
+    const applyFocus = () => {
+        try {
+            const document = referenceFrame.contentDocument;
+            const target = document?.getElementById(targetId);
+            if (!target) {
+                return false;
+            }
+            installReferenceTargetStyles(document);
+            document.querySelectorAll(".platform-reference-target").forEach((element) => {
+                element.classList.remove("platform-reference-target");
+            });
+            target.classList.add("platform-reference-target");
+            if (!target.hasAttribute("tabindex")) {
+                target.setAttribute("tabindex", "-1");
+            }
+            target.scrollIntoView({
+                block: "center",
+                inline: "nearest",
+                behavior: "auto"
+            });
+            target.focus({ preventScroll: true });
+            return true;
+        } catch (ignored) {
+            return false;
+        }
+    };
+    if (applyFocus()) {
+        return;
+    }
+    referenceFrame.addEventListener("load", () => {
+        window.requestAnimationFrame(applyFocus);
+    }, { once: true });
 }
 
 function closeReference() {
@@ -393,10 +786,14 @@ function setProject(project, options) {
     }
     refreshActiveLink(settings.scrollContent ? targetSection : undefined);
     if (settings.scrollContent) {
+        const scrollOptions = {
+            block: settings.scrollBlock,
+            focus: settings.focusTarget
+        };
         if (settings.scrollProjectTitle) {
-            scrollToProjectTitle(project, targetSection);
+            scrollToProjectTitle(project, targetSection, scrollOptions);
         } else {
-            scrollToSection(targetSection);
+            scrollToSection(targetSection, scrollOptions);
         }
     } else {
         queueScrollSpy();
@@ -454,6 +851,39 @@ projectOptions.forEach((summary) => {
 });
 
 document.addEventListener("click", (event) => {
+    const searchResult = event.target.closest("[data-search-result]");
+    if (searchResult) {
+        closeSearchResults();
+        searchInput?.blur();
+        if (searchResult.dataset.searchReferenceUrl) {
+            event.preventDefault();
+            const project = searchResult.dataset.searchProject;
+            setProject(project, {
+                sectionId: firstSections[project],
+                updateHash: true,
+                forceHash: true,
+                scrollContent: true,
+                scrollProjectTitle: true,
+                scrollBlock: "center",
+                focusTarget: true,
+                scrollSubmenu: project !== document.body.dataset.project
+            });
+            const article = projectSections.get(project)?.article;
+            const referenceButton = article?.querySelector("[data-reference-open][data-reference-kind='" + CSS.escape(searchResult.dataset.searchReferenceKind || "configuration") + "']");
+            if (referenceButton) {
+                openReference(referenceButton, {
+                    url: searchResult.dataset.searchReferenceUrl,
+                    title: referenceButton.dataset.referenceTitle,
+                    projectName: referenceButton.dataset.referenceProjectName
+                });
+            }
+            document.body.classList.remove("sidebar-open");
+            sidebarToggle?.setAttribute("aria-expanded", "false");
+            return;
+        }
+    } else if (searchRoot && !searchRoot.contains(event.target)) {
+        closeSearchResults();
+    }
     const referenceTrigger = event.target.closest("[data-reference-open]");
     if (referenceTrigger) {
         event.preventDefault();
@@ -493,12 +923,15 @@ document.addEventListener("click", (event) => {
     const targetProject = projectFromSectionId(targetId);
     if (targetProject) {
         event.preventDefault();
+        const fromSearch = Boolean(hashLink.closest("[data-search-result]"));
         setProject(targetProject, {
             sectionId: targetId,
             updateHash: true,
             forceHash: true,
             scrollContent: true,
-            scrollProjectTitle: Boolean(hashLink.closest("[data-overview-doc-link]")),
+            scrollBlock: fromSearch ? "center" : "start",
+            focusTarget: fromSearch,
+            scrollProjectTitle: Boolean(hashLink.closest("[data-overview-doc-link], [data-search-project-link]")),
             scrollSubmenu: targetProject !== document.body.dataset.project
         });
         document.body.classList.remove("sidebar-open");
@@ -525,7 +958,51 @@ sidebarCollapse?.addEventListener("click", () => {
     }
 });
 
-themeSwitcher?.addEventListener("click", () => switchTheme(true));
+themeSwitcher?.addEventListener("click", () => switchTheme());
+
+searchInput?.addEventListener("input", queueSearch);
+searchInput?.addEventListener("focus", () => {
+    updateSearchUiState();
+    if (searchInput.value.trim().length >= 2) {
+        queueSearch();
+    }
+});
+searchRoot?.addEventListener("focusin", updateSearchUiState);
+searchRoot?.addEventListener("focusout", () => {
+    window.requestAnimationFrame(updateSearchUiState);
+});
+searchInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+        closeSearchResults();
+        searchInput.blur();
+        return;
+    }
+    if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setSearchActive(searchActiveIndex + 1);
+        return;
+    }
+    if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setSearchActive(searchActiveIndex <= 0 ? 999 : searchActiveIndex - 1);
+        return;
+    }
+    if (event.key === "Enter" && searchActiveIndex >= 0) {
+        const result = searchResults?.querySelectorAll("[data-search-result]")[searchActiveIndex];
+        if (result) {
+            event.preventDefault();
+            result.click();
+        }
+    }
+});
+searchClear?.addEventListener("click", () => {
+    if (searchInput) {
+        searchInput.value = "";
+        searchInput.focus();
+    }
+    closeSearchResults();
+    updateSearchUiState();
+});
 
 window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && referencePanel && !referencePanel.hidden) {
@@ -552,7 +1029,15 @@ window.addEventListener("hashchange", () => {
 window.addEventListener("scroll", queueScrollSpy, { passive: true });
 window.addEventListener("resize", queueScrollSpy);
 
-applyTheme(preferredTheme(), false);
+applyTheme(preferredTheme());
+if (window.matchMedia) {
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    colorScheme.addEventListener("change", () => {
+        if (!themeManuallySelected) {
+            applyTheme(preferredTheme());
+        }
+    });
+}
 const initialSectionId = decodeURIComponent(window.location.hash.slice(1));
 if (!initialSectionId || initialSectionId === overviewHash) {
     setOverview(false);
@@ -570,3 +1055,4 @@ if (!initialSectionId || initialSectionId === overviewHash) {
 if (!document.body.classList.contains("overview-active")) {
     queueScrollSpy();
 }
+updateSearchUiState();

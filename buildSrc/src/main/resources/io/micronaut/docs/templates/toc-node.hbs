@@ -1,6 +1,6 @@
 {{#if hasChildren}}
                         <details class="toc-section" open>
-                            <summary><a href="#{{prefixedId}}" data-section="{{prefixedId}}"><span class="toc-number">{{{numberHtml}}}</span><span>{{{titleHtml}}}</span></a></summary>
+                            <summary><a href="#{{prefixedId}}" data-section="{{prefixedId}}"><span class="toc-number">{{{numberHtml}}}</span><span class="toc-title">{{{titleHtml}}}</span></a></summary>
                             <div class="toc-children">
 {{#each children}}
 {{> toc-node}}
@@ -8,5 +8,5 @@
                             </div>
                         </details>
 {{else}}
-                        <a class="toc-link" href="#{{prefixedId}}" data-section="{{prefixedId}}"><span class="toc-number">{{{numberHtml}}}</span><span>{{{titleHtml}}}</span></a>
+                        <a class="toc-link" href="#{{prefixedId}}" data-section="{{prefixedId}}"><span class="toc-number">{{{numberHtml}}}</span><span class="toc-title">{{{titleHtml}}}</span></a>
 {{/if}}

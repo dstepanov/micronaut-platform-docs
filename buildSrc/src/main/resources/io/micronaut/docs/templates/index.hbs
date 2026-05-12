@@ -64,6 +64,16 @@
                         <span>{{platform.displayVersion}}</span>
                     </span>
                 </nav>
+                <div class="site-search" data-search>
+                    <div class="site-search-field">
+                        {{{icons.search}}}
+                        <input type="search" placeholder="Search docs" aria-label="Search docs" autocomplete="off" spellcheck="false" data-search-input>
+                        <button class="site-search-clear" type="button" title="Clear search" aria-label="Clear search" data-search-clear hidden>
+                            {{{icons.x}}}
+                        </button>
+                    </div>
+                    <div class="site-search-results" data-search-results hidden></div>
+                </div>
                 <div class="topbar-actions">
                     <button id="theme-switcher" class="theme-toggle" type="button" title="Switch to dark theme" aria-label="Switch to dark theme" aria-pressed="false" data-theme-switcher>
                         <span class="theme-icon theme-icon-moon">{{{icons.moon}}}</span>
