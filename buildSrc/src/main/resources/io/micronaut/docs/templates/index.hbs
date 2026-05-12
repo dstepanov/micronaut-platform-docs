@@ -46,7 +46,7 @@
 {{#each documents}}
                         <details class="project-section" data-project-nav="{{slug}}"{{#if selected}} open{{/if}}>
                             <summary data-project-option="{{slug}}" aria-current="{{selected}}" title="{{displayName}}">
-                                {{{../icons.bookOpen}}}
+                                {{{projectIcon}}}
                                 <span class="project-title">{{displayName}}</span>
 {{#if version}}
                                 <small>{{version}}</small>
@@ -108,7 +108,7 @@
 {{#each documents}}
                         <article class="project-card" data-project-card="{{slug}}">
                             <div class="project-card-header">
-                                <span class="project-card-icon" aria-hidden="true">{{{../icons.bookOpen}}}</span>
+                                <span class="project-card-icon" aria-hidden="true">{{{projectIcon}}}</span>
                                 <div>
                                     <h2>{{displayName}}</h2>
                                     <p class="project-card-short-description">{{shortDescription}}</p>

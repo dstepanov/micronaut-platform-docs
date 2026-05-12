@@ -15,6 +15,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
         var projectManifest = project.getLayout().getProjectDirectory().file("gradle/platform-doc-projects.properties");
         var repositoryMetadata = project.getLayout().getProjectDirectory().file("gradle/platform-doc-repositories.properties");
         var descriptionCatalog = project.getLayout().getProjectDirectory().file("gradle/platform-doc-descriptions.properties");
+        var iconCatalog = project.getLayout().getProjectDirectory().file("gradle/platform-doc-icons.properties");
         var shardPlan = project.getLayout().getProjectDirectory().file(PlatformDocsShardPlan.DEFAULT_RELATIVE_PATH);
         var guideShardIndex = project.getProviders()
             .gradleProperty("platformDocs.guideShardIndex")
@@ -179,6 +180,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
                 task.getDescriptionCatalog().convention(descriptionCatalog);
+                task.getIconCatalog().convention(iconCatalog);
                 task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("site"));
                 task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
@@ -198,6 +200,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
                 task.getDescriptionCatalog().convention(descriptionCatalog);
+                task.getIconCatalog().convention(iconCatalog);
                 task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("site"));
                 task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);

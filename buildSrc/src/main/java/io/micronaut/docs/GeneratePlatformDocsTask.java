@@ -50,6 +50,8 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String SITE_CSS_RESOURCE = "/io/micronaut/docs/assets/site.css";
     private static final String LOGO_BLACK_RESOURCE = "/io/micronaut/docs/assets/logos/micronaut-horizontal-black.svg";
     private static final String LOGO_WHITE_RESOURCE = "/io/micronaut/docs/assets/logos/micronaut-horizontal-white.svg";
+    private static final String MICRONAUT_SALLY_RESOURCE = "/io/micronaut/docs/assets/icons/micronaut-sally.svg";
+    private static final String BRAND_ICON_RESOURCE_ROOT = "/io/micronaut/docs/assets/icons/brands/";
     private static final String LUCIDE_PROPERTIES_RESOURCE = "META-INF/maven/org.webjars.npm/lucide-static/pom.properties";
     private static final String LUCIDE_ICON_ROOT = "META-INF/resources/webjars/lucide-static/%s/icons/";
     private static final Set<String> GUIDE_THEME_DIRECTORIES = Set.of("css/", "fonts/", "img/default/", "js/", "style/");
@@ -107,6 +109,10 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final Pattern CONFIGURATION_PROPERTY_ROW = Pattern.compile("<tr(\\b[^>]*)>\\s*(<td\\b[^>]*>\\s*<p\\b[^>]*>\\s*<code>(.*?)</code>\\s*</p>\\s*</td>)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_TAG = Pattern.compile("<svg\\b([^>]*)>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_CLASS = Pattern.compile("\\bclass\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SVG_TITLE = Pattern.compile("<title\\b[^>]*>.*?</title>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern SVG_ROLE = Pattern.compile("\\s+role\\s*=\\s*\"[^\"]*\"", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SVG_ARIA_HIDDEN = Pattern.compile("\\s+aria-hidden\\s*=\\s*\"[^\"]*\"", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SVG_FOCUSABLE = Pattern.compile("\\s+focusable\\s*=\\s*\"[^\"]*\"", Pattern.CASE_INSENSITIVE);
 
     @Internal
     public abstract DirectoryProperty getProjectDirectory();
@@ -123,6 +129,11 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     @Optional
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getDescriptionCatalog();
+
+    @InputFile
+    @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getIconCatalog();
 
     @OutputDirectory
     public abstract DirectoryProperty getOutputDirectory();
@@ -147,6 +158,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
 
         Map<String, String> platformVersions = PlatformVersions.read(getPlatformVersionCatalog().get().getAsFile().toPath());
         Properties descriptions = readDescriptionCatalog();
+        Properties projectIcons = readIconCatalog();
         getLogger().quiet("Copying shared Micronaut guide theme assets.");
         copyGuideThemeAssets(outputDirectory);
         List<GuideDocument> documents = new ArrayList<>();
@@ -165,7 +177,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
 
         getLogger().quiet("Writing platform UI assets.");
         writeSiteAssets(outputDirectory, projectDirectory, documents, descriptions);
-        Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents, descriptions)), StandardCharsets.UTF_8);
+        Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents, descriptions, projectIcons)), StandardCharsets.UTF_8);
         getLogger().quiet("Generated platform docs site: {}", outputDirectory.resolve("index.html"));
     }
 
@@ -179,6 +191,22 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             return properties;
         }
         getLogger().quiet("Reading platform docs descriptions from {}.", catalog);
+        try (InputStream input = Files.newInputStream(catalog)) {
+            properties.load(input);
+        }
+        return properties;
+    }
+
+    private Properties readIconCatalog() throws IOException {
+        Properties properties = new Properties();
+        if (!getIconCatalog().isPresent()) {
+            return properties;
+        }
+        Path catalog = getIconCatalog().get().getAsFile().toPath();
+        if (!Files.isRegularFile(catalog)) {
+            return properties;
+        }
+        getLogger().quiet("Reading platform docs icons from {}.", catalog);
         try (InputStream input = Files.newInputStream(catalog)) {
             properties.load(input);
         }
@@ -527,6 +555,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         );
         copyResource(LOGO_BLACK_RESOURCE, siteAssets.resolve("logos/micronaut-horizontal-black.svg"));
         copyResource(LOGO_WHITE_RESOURCE, siteAssets.resolve("logos/micronaut-horizontal-white.svg"));
+        copyResource(MICRONAUT_SALLY_RESOURCE, siteAssets.resolve("icons/micronaut-sally.svg"));
     }
 
     private static String renderTemplate(String templateName, Map<String, Object> model) throws IOException {
@@ -556,7 +585,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
     }
 
-    private static Map<String, Object> siteModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions) throws IOException, InterruptedException {
+    private static Map<String, Object> siteModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException, InterruptedException {
         String defaultProject = documents.get(0).project().slug();
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("assetPath", SITE_ASSET_PATH);
@@ -565,7 +594,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("overviewSectionId", OVERVIEW_SECTION_ID);
         model.put("platform", platformModel(projectDirectory));
         model.put("icons", iconModel());
-        model.put("documents", documentModels(projectDirectory, documents, descriptions));
+        model.put("documents", documentModels(projectDirectory, documents, descriptions, projectIcons));
         return model;
     }
 
@@ -635,6 +664,33 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             throw new IOException("Lucide icon does not contain an svg element: " + resource);
         }
         String attributes = matcher.group(1);
+        Matcher classMatcher = SVG_CLASS.matcher(attributes);
+        String replacement;
+        if (classMatcher.find()) {
+            String classes = (extraClass + " " + classMatcher.group(1)).trim();
+            String updatedAttributes = classMatcher.replaceFirst(Matcher.quoteReplacement("class=\"" + classes + "\""));
+            replacement = "<svg" + updatedAttributes + " aria-hidden=\"true\" focusable=\"false\">";
+        } else {
+            replacement = "<svg class=\"" + extraClass + "\"" + attributes + " aria-hidden=\"true\" focusable=\"false\">";
+        }
+        return matcher.replaceFirst(Matcher.quoteReplacement(replacement));
+    }
+
+    private static String brandIcon(String name, String extraClass) throws IOException {
+        String svg = resourceText(BRAND_ICON_RESOURCE_ROOT + name + ".svg");
+        svg = SVG_TITLE.matcher(svg).replaceAll("").trim();
+        return inlineSvg(svg, extraClass);
+    }
+
+    private static String inlineSvg(String svg, String extraClass) throws IOException {
+        Matcher matcher = SVG_TAG.matcher(svg);
+        if (!matcher.find()) {
+            throw new IOException("Inline icon does not contain an svg element.");
+        }
+        String attributes = matcher.group(1);
+        attributes = SVG_ROLE.matcher(attributes).replaceAll("");
+        attributes = SVG_ARIA_HIDDEN.matcher(attributes).replaceAll("");
+        attributes = SVG_FOCUSABLE.matcher(attributes).replaceAll("");
         Matcher classMatcher = SVG_CLASS.matcher(attributes);
         String replacement;
         if (classMatcher.find()) {
@@ -855,19 +911,20 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return escaped.toString();
     }
 
-    private static List<Map<String, Object>> documentModels(Path projectDirectory, List<GuideDocument> documents, Properties descriptions) {
+    private static List<Map<String, Object>> documentModels(Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException {
         List<Map<String, Object>> models = new ArrayList<>();
         for (int i = 0; i < documents.size(); i++) {
-            models.add(documentModel(projectDirectory, documents.get(i), descriptions, false));
+            models.add(documentModel(projectDirectory, documents.get(i), descriptions, projectIcons, false));
         }
         return models;
     }
 
-    private static Map<String, Object> documentModel(Path projectDirectory, GuideDocument document, Properties descriptions, boolean selected) {
+    private static Map<String, Object> documentModel(Path projectDirectory, GuideDocument document, Properties descriptions, Properties projectIcons, boolean selected) throws IOException {
         GuideProject project = document.project();
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("slug", project.slug());
         model.put("displayName", project.displayName());
+        model.put("projectIcon", projectIcon(project, projectIcons));
         model.put("publishedGuideUrl", project.publishedGuideUrl());
         model.put("repositoryUrl", project.repositoryUrl());
         model.put("branch", project.branch());
@@ -887,6 +944,26 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("configurationReferencePath", configurationReferencePath);
         model.put("hasReferenceLinks", !apiReferencePath.isBlank() || !configurationReferencePath.isBlank());
         return model;
+    }
+
+    private static String projectIcon(GuideProject project, Properties projectIcons) throws IOException {
+        String configured = projectIcons.getProperty("project." + project.slug() + ".icon", "lucide:book-open").trim();
+        int separator = configured.indexOf(':');
+        if (separator <= 0 || separator == configured.length() - 1) {
+            throw new IOException("Invalid icon mapping for " + project.slug() + ": " + configured);
+        }
+        String source = configured.substring(0, separator);
+        String name = configured.substring(separator + 1);
+        return switch (source) {
+            case "brand" -> brandIcon(name, "project-icon project-brand-icon");
+            case "image" -> imageIcon(name, "project-icon project-image-icon");
+            case "lucide" -> lucideIcon(name, "project-icon project-lucide-icon");
+            default -> throw new IOException("Unsupported icon source for " + project.slug() + ": " + source);
+        };
+    }
+
+    private static String imageIcon(String name, String extraClass) {
+        return "<img class=\"" + extraClass + "\" src=\"" + SITE_ASSET_PATH + "/icons/" + escapeAttribute(name) + "\" alt=\"\" aria-hidden=\"true\">";
     }
 
     private static ProjectDescription projectDescription(Path projectDirectory, GuideDocument document, Properties descriptions) {

@@ -199,6 +199,19 @@ body.dark-mode .sidebar-logo-dark {
     stroke-linejoin: round;
 }
 
+.project-brand-icon,
+.project-brand-icon path {
+    fill: currentColor;
+    stroke: none;
+    stroke-width: 0;
+}
+
+.project-image-icon {
+    display: block;
+    object-fit: contain;
+    stroke: none;
+}
+
 .sidebar-content {
     flex: 1;
     min-height: 0;

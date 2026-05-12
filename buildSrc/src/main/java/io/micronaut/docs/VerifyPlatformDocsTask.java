@@ -52,6 +52,10 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
             require(html.contains("href=\"#" + project.slug() + "-"), "Missing overview docs link for " + project.slug());
             require(html.contains("data-project-nav=\"" + project.slug() + "\""), "Missing sidebar for " + project.slug());
             require(html.contains("data-project-option=\"" + project.slug() + "\""), "Missing sidebar project option for " + project.slug());
+            require(html.contains("project-icon"), "Missing sidebar project icons.");
+            if (project.slug().equals("core")) {
+                require(html.contains("platform-assets/icons/micronaut-sally.svg"), "Micronaut Core does not use the Sally project icon.");
+            }
             Set<String> sections = projectSections(html, project.slug());
             require(!sections.isEmpty(), "Missing sidebar section links for " + project.slug());
             for (String section : sections) {
@@ -104,6 +108,7 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(Files.isRegularFile(outputDirectory.resolve("guide-assets/js/multi-language-sample.js")), "Missing classpath Micronaut multi-language script asset.");
         require(Files.isRegularFile(outputDirectory.resolve("platform-assets/logos/micronaut-horizontal-black.svg")), "Missing black Micronaut logo asset.");
         require(Files.isRegularFile(outputDirectory.resolve("platform-assets/logos/micronaut-horizontal-white.svg")), "Missing white Micronaut logo asset.");
+        require(Files.isRegularFile(outputDirectory.resolve("platform-assets/icons/micronaut-sally.svg")), "Missing Micronaut Sally project icon asset.");
         String siteScript = Files.readString(outputDirectory.resolve("platform-assets/site.js"), StandardCharsets.UTF_8);
         require(siteScript.contains("window.addEventListener(\"scroll\", queueScrollSpy"), "Generated script does not highlight sections while scrolling.");
         require(siteScript.contains("activeSectionFromScroll"), "Generated script does not include scroll spy section detection.");
