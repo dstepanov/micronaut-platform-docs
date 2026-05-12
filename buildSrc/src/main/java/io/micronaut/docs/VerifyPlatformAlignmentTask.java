@@ -3,6 +3,8 @@ package io.micronaut.docs;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.PathSensitive;
@@ -27,15 +29,30 @@ public abstract class VerifyPlatformAlignmentTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getProjectManifest();
 
+    @Input
+    public abstract Property<Integer> getShardIndex();
+
+    @Input
+    public abstract Property<Integer> getShardCount();
+
     @TaskAction
     public void verify() throws IOException, InterruptedException {
         Path projectDirectory = getProjectDirectory().get().getAsFile().toPath();
         Map<String, String> versions = PlatformVersions.read(getPlatformVersionCatalog().get().getAsFile().toPath());
         List<GuideProject> projects = GuideProject.readManifest(getProjectManifest().get().getAsFile().toPath());
+        int shardIndex = getShardIndex().getOrElse(0);
+        int shardCount = getShardCount().getOrElse(1);
+        List<GuideProject> selectedProjects = GuideProject.shard(projects, shardIndex, shardCount);
 
-        getLogger().quiet("Verifying platform alignment for {} project submodules.", projects.size());
+        getLogger().quiet(
+            "Verifying platform alignment for {} of {} project submodules (shard {}/{}).",
+            selectedProjects.size(),
+            projects.size(),
+            shardIndex + 1,
+            shardCount
+        );
         int index = 0;
-        for (GuideProject project : projects) {
+        for (GuideProject project : selectedProjects) {
             String expectedVersion = versions.get(project.platformVersionKey());
             if (expectedVersion == null) {
                 throw new IllegalStateException("Platform catalog does not contain " + project.platformVersionKey());
@@ -55,6 +72,12 @@ public abstract class VerifyPlatformAlignmentTask extends DefaultTask {
                     + (tags.isBlank() ? "<none>" : tags.replace('\n', ' ').trim()));
             }
         }
-        getLogger().quiet("Verified platform alignment for {} project submodules.", projects.size());
+        getLogger().quiet(
+            "Verified platform alignment for {} of {} project submodules (shard {}/{}).",
+            selectedProjects.size(),
+            projects.size(),
+            shardIndex + 1,
+            shardCount
+        );
     }
 }

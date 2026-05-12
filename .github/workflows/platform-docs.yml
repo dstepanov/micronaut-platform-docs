@@ -34,7 +34,22 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: recursive
+
+      - name: Init shard submodules
+        shell: bash
+        run: |
+          git submodule update --init repos/micronaut-platform
+          MANIFEST=gradle/platform-doc-projects.properties
+          COUNT=$(grep '^project\.count=' "$MANIFEST" | cut -d= -f2)
+          SHARD_INDEX=${{ matrix.shard }}
+          SHARD_COUNT=$PLATFORM_DOCS_GUIDE_SHARD_COUNT
+          for ((i = 0; i < COUNT; i++)); do
+            if [ $((i % SHARD_COUNT)) -eq "$SHARD_INDEX" ]; then
+              SUBMODULE_PATH=$(grep "^project\.$i\.submodulePath=" "$MANIFEST" | cut -d= -f2)
+              git submodule update --init "$SUBMODULE_PATH"
+              git -C "$SUBMODULE_PATH" fetch --tags --quiet origin
+            fi
+          done
 
       - name: Setup Java 25
         uses: actions/setup-java@v5
@@ -69,7 +84,9 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: recursive
+
+      - name: Init platform submodule
+        run: git submodule update --init repos/micronaut-platform
 
       - name: Setup Java 25
         uses: actions/setup-java@v5
