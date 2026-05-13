@@ -44,31 +44,56 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         );
         getLogger().quiet("Verifying generated platform docs page: {}", indexFile);
         String html = Files.readString(indexFile, StandardCharsets.UTF_8);
+        Path outputDirectory = indexFile.getParent();
+        Path sidebarMenuFile = outputDirectory.resolve("platform-assets/sidebar-menu.html");
+        Path sidebarMenuScriptFile = outputDirectory.resolve("platform-assets/sidebar-menu.js");
+        require(Files.isRegularFile(sidebarMenuFile), "Missing lazy sidebar menu fragment.");
+        require(Files.isRegularFile(sidebarMenuScriptFile), "Missing lazy sidebar menu script fallback.");
+        String sidebarMenuHtml = Files.readString(sidebarMenuFile, StandardCharsets.UTF_8);
         int index = 0;
         for (GuideProject project : projects) {
             getLogger().quiet("[{}/{}] Verifying generated entries for {}.", ++index, projects.size(), project.displayName());
             require(html.contains("data-project=\"" + project.slug() + "\""), "Missing document for " + project.slug());
+            require(
+                html.contains("data-document-url=\"platform-assets/documents/" + project.slug() + ".html\""),
+                "Missing lazy document URL for " + project.slug()
+            );
             require(html.contains("data-project-card=\"" + project.slug() + "\""), "Missing overview card for " + project.slug());
             require(html.contains("href=\"#" + project.slug() + "-"), "Missing overview docs link for " + project.slug());
-            require(html.contains("data-project-nav=\"" + project.slug() + "\""), "Missing sidebar for " + project.slug());
-            require(html.contains("data-project-option=\"" + project.slug() + "\""), "Missing sidebar project option for " + project.slug());
-            require(html.contains("project-icon"), "Missing sidebar project icons.");
+            require(sidebarMenuHtml.contains("data-project-nav=\"" + project.slug() + "\""), "Missing sidebar for " + project.slug());
+            require(sidebarMenuHtml.contains("data-project-option=\"" + project.slug() + "\""), "Missing sidebar project option for " + project.slug());
+            require(sidebarMenuHtml.contains("project-icon"), "Missing sidebar project icons.");
             if (project.slug().equals("core")) {
-                require(html.contains("platform-assets/icons/micronaut-sally.svg"), "Micronaut Core does not use the Sally project icon.");
+                require(
+                    html.contains("platform-assets/icons/micronaut-sally.svg")
+                        || sidebarMenuHtml.contains("platform-assets/icons/micronaut-sally.svg"),
+                    "Micronaut Core does not use the Sally project icon."
+                );
             }
-            Set<String> sections = projectSections(html, project.slug());
+            Set<String> sections = projectSections(sidebarMenuHtml, project.slug());
             require(!sections.isEmpty(), "Missing sidebar section links for " + project.slug());
+            Path documentFile = outputDirectory.resolve("platform-assets/documents/" + project.slug() + ".html");
+            Path documentScriptFile = outputDirectory.resolve("platform-assets/documents/" + project.slug() + ".js");
+            require(Files.isRegularFile(documentFile), "Missing lazy document fragment for " + project.slug());
+            require(Files.isRegularFile(documentScriptFile), "Missing lazy document script fallback for " + project.slug());
+            String documentHtml = Files.readString(documentFile, StandardCharsets.UTF_8);
             for (String section : sections) {
-                require(html.contains("id=\"" + section + "\""), "Missing content anchor " + section + " for " + project.slug());
+                require(documentHtml.contains("id=\"" + section + "\""), "Missing content anchor " + section + " for " + project.slug());
             }
         }
-        require(html.contains("<details class=\"toc-section\""), "Generated sidebar does not contain collapsible sections.");
-        require(html.contains("<details class=\"project-section\""), "Generated sidebar does not contain first-level project sections.");
+        require(html.contains("data-sidebar-menu"), "Generated page does not contain the lazy sidebar menu host.");
+        require(html.contains("data-menu-url=\"platform-assets/sidebar-menu.html\""), "Generated page does not reference the lazy sidebar menu fragment.");
+        require(html.contains("data-menu-script-url=\"platform-assets/sidebar-menu.js\""), "Generated page does not reference the lazy sidebar menu script fallback.");
+        require(!html.contains("<details class=\"project-section\""), "Generated page still embeds first-level project sidebar sections.");
+        require(sidebarMenuHtml.contains("<details class=\"toc-section\""), "Generated sidebar menu does not contain collapsible sections.");
+        require(sidebarMenuHtml.contains("<details class=\"project-section\""), "Generated sidebar menu does not contain first-level project sections.");
         require(html.contains("data-overview"), "Generated page does not contain the platform overview.");
+        require(html.contains("data-project-category=\"most-popular\""), "Generated overview does not put Most Popular first.");
         require(html.contains("class=\"project-card-short-description\""), "Generated overview cards do not contain short project descriptions.");
         require(html.contains("class=\"project-card-long-description\""), "Generated overview cards do not contain long project descriptions.");
         require(html.contains("class=\"project-card-footer\""), "Generated overview cards do not contain a footer.");
         require(html.contains("data-overview-doc-link"), "Generated overview cards do not link back to the in-page docs.");
+        require(html.contains("class=\"document-skeleton\""), "Generated document loading state does not use a skeleton.");
         require(html.contains("data-platform"), "Generated top bar does not display platform information.");
         require(html.contains("Micronaut Platform Docs"), "Generated top bar does not use the platform docs title.");
         require(!html.contains("sidebar-brand-version"), "Generated sidebar still contains the top-left version hint.");
@@ -100,7 +125,6 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(html.contains("src=\"guide-assets/js/highlight.pack.js\""), "Generated page does not reference the classpath Micronaut highlight script.");
         require(html.contains("src=\"guide-assets/js/multi-language-sample.js\""), "Generated page does not reference the classpath Micronaut multi-language script.");
 
-        Path outputDirectory = indexFile.getParent();
         require(Files.isRegularFile(outputDirectory.resolve("guide-assets/css/main.css")), "Missing classpath Micronaut guide stylesheet asset.");
         require(Files.isRegularFile(outputDirectory.resolve("guide-assets/css/tools.css")), "Missing classpath Micronaut Font Awesome stylesheet asset.");
         require(Files.isRegularFile(outputDirectory.resolve("guide-assets/fonts/fontawesome-webfont.woff")), "Missing classpath Micronaut Font Awesome font asset.");
@@ -112,6 +136,8 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         String siteScript = Files.readString(outputDirectory.resolve("platform-assets/site.js"), StandardCharsets.UTF_8);
         require(siteScript.contains("window.addEventListener(\"scroll\", queueScrollSpy"), "Generated script does not highlight sections while scrolling.");
         require(siteScript.contains("activeSectionFromScroll"), "Generated script does not include scroll spy section detection.");
+        require(siteScript.contains("loadProjectDocument"), "Generated script does not lazy-load project documents.");
+        require(siteScript.contains("loadSidebarMenu"), "Generated script does not lazy-load the sidebar menu.");
         require(siteScript.contains("openReference"), "Generated script does not support opening project references in context.");
         require(siteScript.contains("updateReferenceProject"), "Generated script does not keep project references aligned with the active project.");
         getLogger().quiet("Verified generated platform docs page for {} projects.", projects.size());

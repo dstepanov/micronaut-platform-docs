@@ -42,23 +42,14 @@
                         </div>
                         <div class="project-filter-empty" data-project-filter-empty hidden>No projects found</div>
                     </div>
-                    <div class="sidebar-projects">
-{{#each documents}}
-                        <details class="project-section" data-project-nav="{{slug}}"{{#if selected}} open{{/if}}>
-                            <summary data-project-option="{{slug}}" aria-current="{{selected}}" title="{{displayName}}">
-                                {{{projectIcon}}}
-                                <span class="project-title">{{displayName}}</span>
-{{#if version}}
-                                <small>{{version}}</small>
-{{/if}}
-                            </summary>
-                            <div class="toc-tree">
-{{#each toc}}
-{{> toc-node}}
-{{/each}}
-                            </div>
-                        </details>
-{{/each}}
+                    <div class="sidebar-projects" data-sidebar-menu data-menu-url="{{sidebarMenuPath}}" data-menu-script-url="{{sidebarMenuScriptPath}}" aria-busy="true">
+                        <div class="sidebar-menu-loading" data-sidebar-menu-loading aria-label="Loading projects">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
                     </div>
                 </section>
             </nav>
@@ -104,13 +95,19 @@
                     <header class="overview-header">
                         <p class="overview-description">Micronaut Framework is a modern JVM framework for modular applications and services with fast startup, low memory use, and compile-time dependency injection. These platform docs collect the core framework and companion modules in one place for aligned versions, guides, APIs, and configuration references.</p>
                     </header>
-                    <div class="project-card-grid" aria-label="Micronaut modules">
+                    <div class="project-category-list" aria-label="Micronaut modules">
+{{#each categories}}
+                        <section class="project-category" data-project-category="{{slug}}">
+                            <header class="project-category-header">
+                                <h2>{{name}}</h2>
+                            </header>
+                            <div class="project-card-grid">
 {{#each documents}}
-                        <article class="project-card" data-project-card="{{slug}}">
+                        <article class="project-card" data-project-card="{{slug}}" data-project-card-target="{{firstSection}}" role="link" tabindex="0" aria-label="Open {{displayName}} documentation">
                             <div class="project-card-header">
                                 <span class="project-card-icon" aria-hidden="true">{{{projectIcon}}}</span>
                                 <div>
-                                    <h2>{{displayName}}</h2>
+                                    <h3>{{displayName}}</h3>
                                     <p class="project-card-short-description">{{shortDescription}}</p>
                                 </div>
                             </div>
@@ -118,11 +115,11 @@
                             <footer class="project-card-footer">
                                 <div class="project-card-links">
                                     <a href="#{{firstSection}}" data-overview-doc-link aria-label="Open {{displayName}} docs">
-                                        {{{../icons.fileText}}}
+                                        {{{@root.icons.fileText}}}
                                         <span>Docs</span>
                                     </a>
                                     <a href="{{repositoryUrl}}" target="_blank" rel="noopener" aria-label="Open {{displayName}} GitHub repository">
-                                        {{{../icons.github}}}
+                                        {{{@root.icons.github}}}
                                         <span>GitHub</span>
                                     </a>
                                 </div>
@@ -132,10 +129,13 @@
                             </footer>
                         </article>
 {{/each}}
+                            </div>
+                        </section>
+{{/each}}
                     </div>
                 </section>
 {{#each documents}}
-            <article class="guide-document docs-content" data-project="{{slug}}"{{#unless selected}} hidden{{/unless}}>
+            <article class="guide-document docs-content" data-project="{{slug}}" data-document-url="{{documentPath}}" data-document-script-url="{{documentScriptPath}}" aria-busy="false"{{#unless selected}} hidden{{/unless}}>
                 <div class="document-meta">
                     <div class="document-meta-row document-meta-primary">
                         <a href="{{repositoryUrl}}" aria-label="{{displayName}} GitHub repository">
@@ -164,7 +164,20 @@
                     </div>
 {{/if}}
                 </div>
-{{{contentHtml}}}
+                <div class="guide-document-loading" data-document-loading hidden aria-label="Loading documentation">
+                    <div class="document-skeleton" aria-hidden="true">
+                        <div class="document-skeleton-heading"></div>
+                        <div class="document-skeleton-line document-skeleton-line-wide"></div>
+                        <div class="document-skeleton-line"></div>
+                        <div class="document-skeleton-line document-skeleton-line-short"></div>
+                        <div class="document-skeleton-block"></div>
+                        <div class="document-skeleton-line"></div>
+                        <div class="document-skeleton-line document-skeleton-line-wide"></div>
+                        <div class="document-skeleton-line document-skeleton-line-short"></div>
+                    </div>
+                </div>
+                <div class="guide-document-error" data-document-error hidden>Documentation could not be loaded.</div>
+                <div data-document-content></div>
             </article>
 {{/each}}
             </main>

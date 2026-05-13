@@ -26,6 +26,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -133,19 +134,110 @@ final class PlatformDocsSearchTest {
         }
     }
 
+    @Test
+    void clickingSidebarProjectAndOverviewCardLoadsDocumentationContent() throws IOException {
+        try (SiteServer site = serveRenderedSite();
+             Playwright playwright = createPlaywright();
+             Browser browser = launchChromium(playwright)) {
+            Page page = browser.newPage(new Browser.NewPageOptions().setViewportSize(1280, 900));
+            page.setDefaultTimeout(10_000);
+            page.setDefaultNavigationTimeout(10_000);
+            try {
+                page.navigate(site.indexUri().toString());
+                page.waitForFunction("() => document.querySelector('[data-sidebar-menu]')?.dataset.menuLoaded === 'true'");
+
+                page.locator("[data-project-option='core']").click();
+                waitForLoadedProject(page, "core");
+                assertEquals("core", page.evaluate("() => document.body.dataset.project"));
+
+                page.locator(".topbar-title a[href='#platform']").click();
+                page.waitForFunction("() => document.body.classList.contains('overview-active')");
+                page.locator("[data-project-card='serde']").click();
+                waitForLoadedProject(page, "serde");
+                assertEquals("serde", page.evaluate("() => document.body.dataset.project"));
+            } catch (TimeoutError e) {
+                throw new AssertionError("Project documentation did not load after clicking the sidebar project or overview card.", e);
+            } finally {
+                page.close();
+            }
+        }
+    }
+
+    @Test
+    void fileUrlLoadsDocumentationThroughScriptFallback() throws IOException {
+        assertRenderedSiteExists();
+        try (Playwright playwright = createPlaywright();
+             Browser browser = launchChromium(playwright)) {
+            Page page = browser.newPage(new Browser.NewPageOptions().setViewportSize(1280, 900));
+            page.setDefaultTimeout(10_000);
+            page.setDefaultNavigationTimeout(10_000);
+            try {
+                page.navigate(INDEX_FILE.toUri().toString());
+                page.waitForFunction("() => document.querySelector('[data-sidebar-menu]')?.dataset.menuLoaded === 'true'");
+
+                page.locator("[data-project-option='core']").click();
+                waitForLoadedProject(page, "core");
+                assertNoVisibleDocumentationError(page, "core");
+
+                page.locator(".topbar-title a[href='#platform']").click();
+                page.waitForFunction("() => document.body.classList.contains('overview-active')");
+                page.locator("[data-project-card='serde']").click();
+                waitForLoadedProject(page, "serde");
+                assertNoVisibleDocumentationError(page, "serde");
+            } catch (TimeoutError e) {
+                String state = (String) page.evaluate(
+                    "() => Array.from(document.querySelectorAll('article.guide-document')).map((article) => {" +
+                        "const error = article.querySelector('[data-document-error]');" +
+                        "return `${article.dataset.project}: hidden=${article.hidden}, loaded=${article.dataset.documentLoaded || 'false'}, errorHidden=${error?.hidden}`;" +
+                        "}).join('\\n')"
+                );
+                throw new AssertionError("File URL project documentation did not load through the script fallback.\n" + state, e);
+            } finally {
+                page.close();
+            }
+        }
+    }
+
+    @Test
+    void httpDocumentFetchFailureLoadsDocumentationThroughScriptFallback() throws IOException {
+        try (SiteServer site = serveRenderedSite("platform-assets/documents/core.html");
+             Playwright playwright = createPlaywright();
+             Browser browser = launchChromium(playwright)) {
+            Page page = browser.newPage(new Browser.NewPageOptions().setViewportSize(1280, 900));
+            page.setDefaultTimeout(10_000);
+            page.setDefaultNavigationTimeout(10_000);
+            try {
+                page.navigate(site.indexUri().toString());
+                page.waitForFunction("() => document.querySelector('[data-sidebar-menu]')?.dataset.menuLoaded === 'true'");
+
+                page.locator("[data-project-card='core']").click();
+                waitForLoadedProject(page, "core");
+                assertNoVisibleDocumentationError(page, "core");
+            } catch (TimeoutError e) {
+                throw new AssertionError("Project documentation did not load through the HTTP script fallback.", e);
+            } finally {
+                page.close();
+            }
+        }
+    }
+
     private static void assertRenderedSiteExists() {
         assertTrue(Files.isRegularFile(INDEX_FILE), "Render platform docs before running integration tests: " + INDEX_FILE);
     }
 
     private static SiteServer serveRenderedSite() throws IOException {
+        return serveRenderedSite(new String[0]);
+    }
+
+    private static SiteServer serveRenderedSite(String... unavailableRelativePaths) throws IOException {
         assertRenderedSiteExists();
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext("/", exchange -> serveStaticFile(exchange, SITE_DIRECTORY));
+        server.createContext("/", exchange -> serveStaticFile(exchange, SITE_DIRECTORY, Set.of(unavailableRelativePaths)));
         server.start();
         return new SiteServer(server, URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/index.html"));
     }
 
-    private static void serveStaticFile(HttpExchange exchange, Path root) throws IOException {
+    private static void serveStaticFile(HttpExchange exchange, Path root, Set<String> unavailableRelativePaths) throws IOException {
         try (exchange) {
             String method = exchange.getRequestMethod();
             if (!"GET".equals(method) && !"HEAD".equals(method)) {
@@ -154,7 +246,7 @@ final class PlatformDocsSearchTest {
             }
 
             Path file = requestedFile(root, exchange.getRequestURI());
-            if (!file.startsWith(root) || !Files.isRegularFile(file)) {
+            if (!file.startsWith(root) || unavailableRelativePaths.contains(relativePath(root, file)) || !Files.isRegularFile(file)) {
                 exchange.sendResponseHeaders(404, -1);
                 return;
             }
@@ -174,6 +266,10 @@ final class PlatformDocsSearchTest {
             path = "/index.html";
         }
         return root.resolve(path.substring(1)).normalize();
+    }
+
+    private static String relativePath(Path root, Path file) {
+        return root.relativize(file).toString().replace('\\', '/');
     }
 
     private static String contentType(Path file) throws IOException {
@@ -231,6 +327,28 @@ final class PlatformDocsSearchTest {
                 "}",
             expectedText
         ), "Expected a search result containing: " + expectedText);
+    }
+
+    private static void waitForLoadedProject(Page page, String project) {
+        page.waitForFunction(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "const content = article?.querySelector('[data-document-content]');" +
+                "return Boolean(article && !article.hidden && article.dataset.documentLoaded === 'true' && content?.childElementCount);" +
+                "}",
+            project
+        );
+    }
+
+    private static void assertNoVisibleDocumentationError(Page page, String project) {
+        assertTrue((Boolean) page.evaluate(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "const error = article?.querySelector('[data-document-error]');" +
+                "return Boolean(error?.hidden);" +
+                "}",
+            project
+        ), "Documentation error must stay hidden for " + project);
     }
 
     private static Playwright createPlaywright() {

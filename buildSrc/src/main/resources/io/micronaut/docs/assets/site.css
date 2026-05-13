@@ -332,6 +332,59 @@ body.dark-mode .sidebar-logo-dark {
     gap: 1px;
 }
 
+.sidebar-menu-loading {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+}
+
+.sidebar-menu-loading span,
+.document-skeleton-heading,
+.document-skeleton-line,
+.document-skeleton-block {
+    position: relative;
+    overflow: hidden;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--muted) 15%, transparent);
+}
+
+.sidebar-menu-loading span::after,
+.document-skeleton-heading::after,
+.document-skeleton-line::after,
+.document-skeleton-block::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 76%, transparent), transparent);
+    animation: platform-skeleton 1.45s ease-in-out infinite;
+}
+
+.sidebar-menu-loading span {
+    height: 28px;
+}
+
+.sidebar-menu-loading span:nth-child(1),
+.sidebar-menu-loading span:nth-child(4) {
+    width: 86%;
+}
+
+.sidebar-menu-loading span:nth-child(2),
+.sidebar-menu-loading span:nth-child(5) {
+    width: 72%;
+}
+
+.sidebar-menu-loading span:nth-child(3) {
+    width: 92%;
+}
+
+.sidebar-menu-error {
+    padding: 10px 8px;
+    color: #b42318;
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
 .sidebar-rail {
     position: absolute;
     top: 0;
@@ -1010,23 +1063,55 @@ body.dark-mode .theme-icon-sun {
     text-wrap: pretty;
 }
 
+.project-category-list {
+    display: grid;
+    gap: 32px;
+}
+
+.project-category {
+    min-width: 0;
+}
+
+.project-category-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.project-category-header h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: 1.04rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
 .project-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 300px));
     gap: 12px;
+    justify-content: start;
 }
 
 .project-card {
     display: grid;
     grid-template-rows: auto minmax(92px, 1fr) auto;
+    aspect-ratio: 1 / 1;
     gap: 14px;
+    width: 100%;
     min-width: 0;
-    min-height: 230px;
+    min-height: 260px;
     padding: 18px;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: var(--card-surface);
     box-shadow: 0 1px 2px rgba(23, 32, 38, 0.04);
+}
+
+.project-card[role="link"] {
+    cursor: pointer;
 }
 
 .project-card,
@@ -1040,6 +1125,12 @@ body.dark-mode .theme-icon-sun {
 .project-card:hover {
     border-color: #c7d2da;
     box-shadow: 0 8px 24px rgba(23, 32, 38, 0.08);
+}
+
+.project-card:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 54%, transparent);
+    outline-offset: 2px;
+    border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
 }
 
 .project-card-header {
@@ -1065,7 +1156,7 @@ body.dark-mode .theme-icon-sun {
     color: currentColor;
 }
 
-.project-card h2 {
+.project-card h3 {
     margin: 0;
     color: var(--text);
     font-size: 1rem;
@@ -1147,6 +1238,62 @@ body.dark-mode .theme-icon-sun {
     contain-intrinsic-size: auto 900px;
 }
 
+.guide-document-error {
+    display: grid;
+    place-items: center;
+    min-height: min(420px, calc(100vh - var(--topbar-height) - 48px));
+    color: var(--muted);
+    font-family: var(--shell-font);
+    font-size: 0.92rem;
+}
+
+.guide-document-loading {
+    min-height: min(520px, calc(100vh - var(--topbar-height) - 48px));
+    padding: 96px clamp(24px, 5vw, 72px) 48px;
+    font-family: var(--shell-font);
+}
+
+.document-skeleton {
+    display: grid;
+    gap: 14px;
+    width: min(880px, 100%);
+}
+
+.document-skeleton-heading {
+    width: min(420px, 80%);
+    height: 32px;
+    margin-bottom: 8px;
+}
+
+.document-skeleton-line {
+    height: 14px;
+    width: 76%;
+}
+
+.document-skeleton-line-wide {
+    width: 94%;
+}
+
+.document-skeleton-line-short {
+    width: 48%;
+}
+
+.document-skeleton-block {
+    width: 100%;
+    height: 148px;
+    margin: 12px 0 4px;
+}
+
+.guide-document-error {
+    color: #b42318;
+}
+
+@keyframes platform-skeleton {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
 .document-meta {
     position: absolute;
     top: 24px;
@@ -1162,6 +1309,10 @@ body.dark-mode .theme-icon-sun {
     font-size: 0.875rem;
     pointer-events: none;
     z-index: 2;
+}
+
+.guide-document[aria-busy="true"] .document-meta {
+    display: none;
 }
 
 .document-meta-row {
@@ -1615,6 +1766,10 @@ body.dark-mode .reference-action:hover {
 
     .project-card-grid {
         grid-template-columns: 1fr;
+    }
+
+    .project-card {
+        aspect-ratio: auto;
     }
 
     .project-card-footer {

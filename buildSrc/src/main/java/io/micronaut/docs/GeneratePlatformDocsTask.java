@@ -63,6 +63,25 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         "than", "that", "their", "then", "there", "these", "this", "those", "through", "using", "when", "where",
         "which", "while", "with", "would", "your"
     );
+    private static final List<ProjectCategory> PROJECT_CATEGORIES = List.of(
+        new ProjectCategory("Most Popular", Set.of("core", "data", "security", "graphql", "spring", "kafka", "openapi")),
+        new ProjectCategory("AI", Set.of("langchain4j", "mcp")),
+        new ProjectCategory("Dev & Test", Set.of("test", "test-resources", "control-panel")),
+        new ProjectCategory("Build", Set.of("aot", "gradle", "sourcegen", "openrewrite")),
+        new ProjectCategory("Data Access", Set.of("cassandra", "coherence", "eclipsestore", "mongodb", "neo4j", "r2dbc", "redis", "sql")),
+        new ProjectCategory("Database Migration", Set.of("flyway", "liquibase")),
+        new ProjectCategory("Errors", Set.of("problem-json")),
+        new ProjectCategory("Messaging", Set.of("jms", "mqtt", "nats", "pulsar", "rabbitmq")),
+        new ProjectCategory("Analytics", Set.of("elasticsearch", "jmx", "micrometer", "opensearch", "tracing")),
+        new ProjectCategory("API", Set.of("grpc", "guice", "jackson-xml", "jaxrs", "json-schema", "serde", "servlet")),
+        new ProjectCategory("Cloud", Set.of("aws", "azure", "discovery-client", "gcp", "kubernetes", "object-storage", "oracle-cloud")),
+        new ProjectCategory("Configuration", Set.of("logging", "toml")),
+        new ProjectCategory("Languages", Set.of("groovy", "kotlin", "graal-languages")),
+        new ProjectCategory("Misc", Set.of("acme", "cache", "chatbots", "email", "picocli", "session")),
+        new ProjectCategory("Reactive", Set.of("reactor", "rxjava3")),
+        new ProjectCategory("Views", Set.of("multitenancy", "rss", "views")),
+        new ProjectCategory("Validation", Set.of("hibernate-validator", "validation"))
+    );
     private static final String EMBEDDED_REFERENCE_STYLE = """
 
         <style>
@@ -183,7 +202,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
 
         getLogger().quiet("Writing platform UI assets.");
-        writeSiteAssets(outputDirectory, projectDirectory, documents, descriptions);
+        writeSiteAssets(outputDirectory, projectDirectory, documents, descriptions, projectIcons);
         Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents, descriptions, projectIcons)), StandardCharsets.UTF_8);
         getLogger().quiet("Generated platform docs site: {}", outputDirectory.resolve("index.html"));
     }
@@ -548,9 +567,11 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return Math.min(queryIndex, hashIndex);
     }
 
-    private static void writeSiteAssets(Path outputDirectory, Path projectDirectory, List<GuideDocument> documents, Properties descriptions) throws IOException {
+    private static void writeSiteAssets(Path outputDirectory, Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException {
         Path siteAssets = outputDirectory.resolve(SITE_ASSET_PATH);
         Files.createDirectories(siteAssets);
+        writeProjectDocuments(siteAssets, documents);
+        writeSidebarMenu(siteAssets, projectDirectory, documents, descriptions, projectIcons);
         Files.writeString(siteAssets.resolve("site.css"), resourceText(SITE_CSS_RESOURCE), StandardCharsets.UTF_8);
         Files.writeString(siteAssets.resolve("site.js"), renderTemplate("assets/site.js", scriptModel(documents)), StandardCharsets.UTF_8);
         String searchIndexJson = searchIndexJson(projectDirectory, documents, descriptions);
@@ -563,6 +584,36 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         copyResource(LOGO_BLACK_RESOURCE, siteAssets.resolve("logos/micronaut-horizontal-black.svg"));
         copyResource(LOGO_WHITE_RESOURCE, siteAssets.resolve("logos/micronaut-horizontal-white.svg"));
         copyResource(MICRONAUT_SALLY_RESOURCE, siteAssets.resolve("icons/micronaut-sally.svg"));
+    }
+
+    private static void writeProjectDocuments(Path siteAssets, List<GuideDocument> documents) throws IOException {
+        Path documentDirectory = siteAssets.resolve("documents");
+        Files.createDirectories(documentDirectory);
+        for (GuideDocument document : documents) {
+            String slug = document.project().slug();
+            String html = document.contentHtml();
+            Files.writeString(documentDirectory.resolve(slug + ".html"), html, StandardCharsets.UTF_8);
+            Files.writeString(
+                documentDirectory.resolve(slug + ".js"),
+                "window.__PLATFORM_DOCUMENTS__=window.__PLATFORM_DOCUMENTS__||{};"
+                    + "window.__PLATFORM_DOCUMENTS__[\"" + jsonString(slug) + "\"]=\""
+                    + jsonString(html)
+                    + "\";\n",
+                StandardCharsets.UTF_8
+            );
+        }
+    }
+
+    private static void writeSidebarMenu(Path siteAssets, Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException {
+        String html = renderTemplate("sidebar-menu", sidebarMenuModel(projectDirectory, documents, descriptions, projectIcons));
+        Files.writeString(siteAssets.resolve("sidebar-menu.html"), html, StandardCharsets.UTF_8);
+        Files.writeString(
+            siteAssets.resolve("sidebar-menu.js"),
+            "window.__PLATFORM_SIDEBAR_MENU__=\""
+                + jsonString(html)
+                + "\";\n",
+            StandardCharsets.UTF_8
+        );
     }
 
     private static String renderTemplate(String templateName, Map<String, Object> model) throws IOException {
@@ -601,7 +652,11 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("overviewSectionId", OVERVIEW_SECTION_ID);
         model.put("platform", platformModel(projectDirectory));
         model.put("icons", iconModel());
-        model.put("documents", documentModels(projectDirectory, documents, descriptions, projectIcons));
+        List<Map<String, Object>> documentModels = documentModels(projectDirectory, documents, descriptions, projectIcons);
+        model.put("documents", documentModels);
+        model.put("categories", categoryModels(documentModels));
+        model.put("sidebarMenuPath", SITE_ASSET_PATH + "/sidebar-menu.html");
+        model.put("sidebarMenuScriptPath", SITE_ASSET_PATH + "/sidebar-menu.js");
         return model;
     }
 
@@ -739,7 +794,56 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("firstSections", firstSectionModels(documents));
         model.put("searchIndexUrl", SITE_ASSET_PATH + "/search-index.json");
         model.put("searchIndexScriptUrl", SITE_ASSET_PATH + "/search-index.js");
+        model.put("sidebarMenuUrl", SITE_ASSET_PATH + "/sidebar-menu.html");
+        model.put("sidebarMenuScriptUrl", SITE_ASSET_PATH + "/sidebar-menu.js");
         return model;
+    }
+
+    private static Map<String, Object> sidebarMenuModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException {
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("documents", documentModels(projectDirectory, documents, descriptions, projectIcons));
+        return model;
+    }
+
+    private static List<Map<String, Object>> categoryModels(List<Map<String, Object>> documents) {
+        Map<String, List<Map<String, Object>>> documentsByCategory = new LinkedHashMap<>();
+        for (ProjectCategory category : PROJECT_CATEGORIES) {
+            documentsByCategory.put(category.name(), new ArrayList<>());
+        }
+        documentsByCategory.put("Other", new ArrayList<>());
+
+        for (Map<String, Object> document : documents) {
+            String slug = String.valueOf(document.get("slug"));
+            documentsByCategory.computeIfAbsent(projectCategory(slug), ignored -> new ArrayList<>()).add(document);
+        }
+
+        List<Map<String, Object>> categories = new ArrayList<>();
+        for (Map.Entry<String, List<Map<String, Object>>> entry : documentsByCategory.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                continue;
+            }
+            Map<String, Object> model = new LinkedHashMap<>();
+            model.put("name", entry.getKey());
+            model.put("slug", categorySlug(entry.getKey()));
+            model.put("documents", entry.getValue());
+            categories.add(model);
+        }
+        return categories;
+    }
+
+    private static String projectCategory(String slug) {
+        for (ProjectCategory category : PROJECT_CATEGORIES) {
+            if (category.projectSlugs().contains(slug)) {
+                return category.name();
+            }
+        }
+        return "Other";
+    }
+
+    private static String categorySlug(String name) {
+        return name.toLowerCase(Locale.ROOT)
+            .replaceAll("[^a-z0-9]+", "-")
+            .replaceAll("(^-+|-+$)", "");
     }
 
     private static String searchIndexJson(Path projectDirectory, List<GuideDocument> documents, Properties descriptions) throws IOException {
@@ -988,6 +1092,8 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
                 case '\n' -> escaped.append("\\n");
                 case '\r' -> escaped.append("\\r");
                 case '\t' -> escaped.append("\\t");
+                case '\u2028' -> escaped.append("\\u2028");
+                case '\u2029' -> escaped.append("\\u2029");
                 default -> {
                     if (character < 0x20) {
                         escaped.append("\\u").append(String.format("%04x", (int) character));
@@ -1024,8 +1130,9 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("description", description.longDescription());
         model.put("version", document.version());
         model.put("firstSection", firstFragment(document));
+        model.put("documentPath", projectDocumentPath(project, ".html"));
+        model.put("documentScriptPath", projectDocumentPath(project, ".js"));
         model.put("toc", tocNodeModels(buildTocTree(document.tocItems())));
-        model.put("contentHtml", document.contentHtml());
         model.put("selected", selected);
         String apiReferencePath = generatedDocumentPath(projectDirectory, project, "api/index.html");
         String configurationReferencePath = generatedDocumentPath(projectDirectory, project, "guide/configurationreference.html");
@@ -1033,6 +1140,12 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("configurationReferencePath", configurationReferencePath);
         model.put("hasReferenceLinks", !apiReferencePath.isBlank() || !configurationReferencePath.isBlank());
         return model;
+    }
+
+    private static String projectDocumentPath(GuideProject project, String extension) {
+        return Path.of(SITE_ASSET_PATH, "documents", project.slug() + extension)
+            .toString()
+            .replace('\\', '/');
     }
 
     private static String projectIcon(GuideProject project, Properties projectIcons) throws IOException {
@@ -1332,6 +1445,9 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     }
 
     private record ProjectDescription(String shortDescription, String longDescription) {
+    }
+
+    private record ProjectCategory(String name, Set<String> projectSlugs) {
     }
 
     private record SearchItem(

@@ -8,12 +8,14 @@ const projectSlugsByLength = [...projectSlugs].sort((left, right) => right.lengt
 const overviewHash = "platform";
 const searchIndexUrl = "{{{searchIndexUrl}}}";
 const searchIndexScriptUrl = "{{{searchIndexScriptUrl}}}";
+const sidebarMenuUrl = "{{{sidebarMenuUrl}}}";
+const sidebarMenuScriptUrl = "{{{sidebarMenuScriptUrl}}}";
 const overviewPage = document.querySelector("[data-overview]");
-const projectOptions = Array.from(document.querySelectorAll("[data-project-option]"));
 const sidebarCollapse = document.querySelector(".sidebar-collapse");
 const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-label]");
 const sidebarToggle = document.querySelector(".sidebar-toggle");
 const sidebarContent = document.querySelector(".sidebar-content");
+const sidebarMenu = document.querySelector("[data-sidebar-menu]");
 const themeSwitcher = document.querySelector("[data-theme-switcher]");
 const projectFilterRoot = document.querySelector("[data-project-filter]");
 const projectFilterToggle = document.querySelector("[data-project-filter-toggle]");
@@ -31,12 +33,12 @@ const referenceTitle = document.querySelector("[data-reference-title]");
 const referenceProject = document.querySelector("[data-reference-project-label]");
 const referenceOpenNew = document.querySelector("[data-reference-open-new]");
 const referenceExpand = document.querySelector("[data-reference-expand]");
+const projectCards = Array.from(document.querySelectorAll("[data-project-card]"));
 const projectArticles = new Map(Array.from(document.querySelectorAll("article.guide-document[data-project]")).map((article) => [article.dataset.project, article]));
-const projectSections = new Map(projectOptions.map((summary) => {
-    const section = summary.closest("[data-project-nav]");
-    return [section.dataset.projectNav, { section, summary, article: projectArticles.get(section.dataset.projectNav) }];
-}));
+const projectDocumentPromises = new Map();
 const headingCache = new Map();
+let projectOptions = [];
+let projectSections = new Map();
 let activeSectionId = "";
 let activeLink;
 let activeReferenceButton;
@@ -291,6 +293,239 @@ function loadSearchIndexScript() {
         };
         script.onerror = () => reject(new Error("Unable to load search index script"));
         document.head.appendChild(script);
+    });
+}
+
+function loadSidebarMenuScript() {
+    return new Promise((resolve, reject) => {
+        if (window.__PLATFORM_SIDEBAR_MENU__) {
+            resolve(window.__PLATFORM_SIDEBAR_MENU__);
+            return;
+        }
+        const script = document.createElement("script");
+        script.src = sidebarMenuScriptUrl;
+        script.async = true;
+        script.onload = () => {
+            if (window.__PLATFORM_SIDEBAR_MENU__) {
+                resolve(window.__PLATFORM_SIDEBAR_MENU__);
+            } else {
+                reject(new Error("Sidebar menu script did not define a menu"));
+            }
+        };
+        script.onerror = () => reject(new Error("Unable to load sidebar menu script"));
+        document.head.appendChild(script);
+    });
+}
+
+function requestSidebarMenu() {
+    if (window.__PLATFORM_SIDEBAR_MENU__) {
+        return Promise.resolve(window.__PLATFORM_SIDEBAR_MENU__);
+    }
+    if (window.location.protocol === "file:") {
+        return loadSidebarMenuScript();
+    }
+    return fetch(sidebarMenuUrl, { cache: "force-cache" })
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error("Unable to load sidebar menu");
+            }
+            return response.text();
+        })
+        .catch(() => loadSidebarMenuScript());
+}
+
+function refreshProjectSections() {
+    projectOptions = Array.from(document.querySelectorAll("[data-project-option]"));
+    projectSections = new Map(projectOptions.map((summary) => {
+        const section = summary.closest("[data-project-nav]");
+        return [section.dataset.projectNav, { section, summary, article: projectArticles.get(section.dataset.projectNav) }];
+    }));
+}
+
+function showSidebarMenuError() {
+    if (!sidebarMenu) {
+        return;
+    }
+    sidebarMenu.innerHTML = "<div class=\"sidebar-menu-error\">Projects could not be loaded.</div>";
+    sidebarMenu.setAttribute("aria-busy", "false");
+}
+
+function loadSidebarMenu() {
+    if (!sidebarMenu || sidebarMenu.dataset.menuLoaded === "true") {
+        return Promise.resolve();
+    }
+    sidebarMenu.setAttribute("aria-busy", "true");
+    return requestSidebarMenu()
+        .then((html) => {
+            sidebarMenu.innerHTML = html;
+            sidebarMenu.dataset.menuLoaded = "true";
+            sidebarMenu.setAttribute("aria-busy", "false");
+            bindProjectOptions();
+            applyProjectFilter();
+        })
+        .catch((errorValue) => {
+            showSidebarMenuError();
+            throw errorValue;
+        });
+}
+
+function platformDocumentCache() {
+    window.__PLATFORM_DOCUMENTS__ = window.__PLATFORM_DOCUMENTS__ || {};
+    return window.__PLATFORM_DOCUMENTS__;
+}
+
+function cacheBustedUrl(url) {
+    if (!url || window.location.protocol === "file:") {
+        return url;
+    }
+    const separator = url.includes("?") ? "&" : "?";
+    return url + separator + "v=" + Date.now();
+}
+
+function loadProjectDocumentScript(project, scriptUrl, options) {
+    const settings = options || {};
+    const documents = platformDocumentCache();
+    if (Object.prototype.hasOwnProperty.call(documents, project)) {
+        return Promise.resolve(documents[project]);
+    }
+    if (!scriptUrl) {
+        return Promise.reject(new Error("Project document script URL is not configured"));
+    }
+    return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = settings.bustCache ? cacheBustedUrl(scriptUrl) : scriptUrl;
+        script.async = true;
+        script.onload = () => {
+            const cachedDocuments = platformDocumentCache();
+            if (Object.prototype.hasOwnProperty.call(cachedDocuments, project)) {
+                resolve(cachedDocuments[project]);
+            } else {
+                reject(new Error("Project document script did not define " + project));
+            }
+        };
+        script.onerror = () => reject(new Error("Unable to load project document script"));
+        document.head.appendChild(script);
+    });
+}
+
+function requestProjectDocument(project, article) {
+    const documentUrl = article.dataset.documentUrl;
+    const documentScriptUrl = article.dataset.documentScriptUrl;
+    if (window.location.protocol === "file:") {
+        return loadProjectDocumentScript(project, documentScriptUrl);
+    }
+    if (!documentUrl) {
+        return loadProjectDocumentScript(project, documentScriptUrl);
+    }
+    return fetch(documentUrl, { cache: "no-cache" })
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error("Unable to load project document");
+            }
+            return response.text();
+        })
+        .catch(() => loadProjectDocumentScript(project, documentScriptUrl, { bustCache: true }));
+}
+
+function hydrateGuideDocument(article) {
+    try {
+        if (typeof createCopyToClipboardElement === "function") {
+            article.querySelectorAll(".multi-language-sample").forEach((sample) => {
+                if (!sample.querySelector(".copytoclipboard")) {
+                    sample.appendChild(createCopyToClipboardElement());
+                }
+            });
+        }
+        if (typeof postProcessCodeBlocks === "function") {
+            postProcessCodeBlocks();
+        }
+        if (typeof postProcessCodeCallouts === "function") {
+            postProcessCodeCallouts();
+        }
+        if (window.hljs) {
+            article.querySelectorAll("pre code:not(.hljs)").forEach((code) => {
+                if (typeof window.hljs.highlightElement === "function") {
+                    window.hljs.highlightElement(code);
+                } else if (typeof window.hljs.highlightBlock === "function") {
+                    window.hljs.highlightBlock(code);
+                }
+            });
+        }
+    } catch (errorValue) {
+        console.warn("Documentation loaded, but post-processing failed.", errorValue);
+    }
+}
+
+function showProjectDocumentError(article) {
+    const loading = article.querySelector("[data-document-loading]");
+    const error = article.querySelector("[data-document-error]");
+    const content = article.querySelector("[data-document-content]");
+    if (content && (content.childElementCount > 0 || content.textContent.trim())) {
+        if (loading) {
+            loading.hidden = true;
+        }
+        if (error) {
+            error.hidden = true;
+        }
+        article.dataset.documentLoaded = "true";
+        article.setAttribute("aria-busy", "false");
+        return;
+    }
+    if (loading) {
+        loading.hidden = true;
+    }
+    if (error) {
+        error.hidden = false;
+    }
+    article.setAttribute("aria-busy", "false");
+}
+
+function loadProjectDocument(project) {
+    const article = projectArticles.get(project);
+    if (!article || article.dataset.documentLoaded === "true") {
+        return Promise.resolve(article);
+    }
+    if (projectDocumentPromises.has(project)) {
+        return projectDocumentPromises.get(project);
+    }
+
+    const loading = article.querySelector("[data-document-loading]");
+    const error = article.querySelector("[data-document-error]");
+    if (loading) {
+        loading.hidden = false;
+    }
+    if (error) {
+        error.hidden = true;
+    }
+    article.setAttribute("aria-busy", "true");
+
+    const promise = requestProjectDocument(project, article)
+        .then((html) => {
+            const content = article.querySelector("[data-document-content]");
+            if (content) {
+                content.innerHTML = html;
+            }
+            if (loading) {
+                loading.hidden = true;
+            }
+            article.dataset.documentLoaded = "true";
+            article.setAttribute("aria-busy", "false");
+            headingCache.delete(project);
+            hydrateGuideDocument(article);
+            return article;
+        })
+        .catch((errorValue) => {
+            projectDocumentPromises.delete(project);
+            showProjectDocumentError(article);
+            throw errorValue;
+        });
+    projectDocumentPromises.set(project, promise);
+    return promise;
+}
+
+function prefetchProjectDocument(project) {
+    loadProjectDocument(project).catch(() => {
+        // The visible project load path will show the error state if the user opens it.
     });
 }
 
@@ -605,7 +840,7 @@ function scrollToSectionNow(sectionId, options) {
 }
 
 function scrollToProjectTitleNow(project, options) {
-    const article = projectSections.get(project)?.article;
+    const article = projectSections.get(project)?.article || projectArticles.get(project);
     scrollToElementNow(article, options);
 }
 
@@ -621,6 +856,31 @@ function scrollToSection(sectionId, options) {
             queueScrollSpy();
         });
     });
+}
+
+function openProjectCard(card) {
+    const targetSection = card?.dataset.projectCardTarget || firstSections[card?.dataset.projectCard];
+    const targetProject = projectFromSectionId(targetSection) || card?.dataset.projectCard;
+    if (!targetProject) {
+        return;
+    }
+    setProject(targetProject, {
+        sectionId: targetSection,
+        updateHash: true,
+        forceHash: true,
+        scrollContent: true,
+        scrollProjectTitle: true,
+        scrollSubmenu: targetProject !== document.body.dataset.project
+    });
+    closeSidebar();
+}
+
+function isInteractiveCardTarget(target, card) {
+    if (!(target instanceof Element)) {
+        return false;
+    }
+    const interactive = target.closest("a, button, input, select, textarea, summary, details, iframe, [role='button']");
+    return Boolean(interactive && interactive !== card);
 }
 
 function scrollToProjectTitle(project, activeSectionIdForProject, options) {
@@ -777,7 +1037,7 @@ function updateReferenceProject(project) {
     if (!activeReferenceKind || !referencePanel || referencePanel.hidden) {
         return;
     }
-    const article = projectSections.get(project)?.article;
+    const article = projectSections.get(project)?.article || projectArticles.get(project);
     const button = article?.querySelector("[data-reference-open][data-reference-kind='" + CSS.escape(activeReferenceKind) + "']");
     if (button) {
         openReference(button);
@@ -810,10 +1070,11 @@ function setOverview(options) {
     const settings = options || {};
     const previousProject = document.body.dataset.project;
     const previous = projectSections.get(previousProject);
+    const previousArticle = previous?.article || projectArticles.get(previousProject);
+    if (previousArticle) {
+        previousArticle.hidden = true;
+    }
     if (previous) {
-        if (previous.article) {
-            previous.article.hidden = true;
-        }
         previous.section.classList.remove("active");
         previous.summary.setAttribute("aria-current", "false");
     }
@@ -847,24 +1108,28 @@ function setProject(project, options) {
     const previousProject = document.body.dataset.project;
     const previous = projectSections.get(previousProject);
     const next = projectSections.get(project);
+    const previousArticle = previous?.article || projectArticles.get(previousProject);
+    const nextArticle = next?.article || projectArticles.get(project);
     document.body.dataset.project = project;
     document.body.classList.remove("overview-active");
     if (overviewPage) {
         overviewPage.hidden = true;
     }
 
-    if (previousProject !== project && previous) {
-        if (previous.article) {
-            previous.article.hidden = true;
+    if (previousProject !== project) {
+        if (previousArticle) {
+            previousArticle.hidden = true;
         }
-        previous.section.classList.remove("active");
-        previous.section.open = false;
-        previous.summary.setAttribute("aria-current", "false");
+        if (previous) {
+            previous.section.classList.remove("active");
+            previous.section.open = false;
+            previous.summary.setAttribute("aria-current", "false");
+        }
+    }
+    if (nextArticle) {
+        nextArticle.hidden = false;
     }
     if (next) {
-        if (next.article) {
-            next.article.hidden = false;
-        }
         next.section.classList.add("active");
         next.section.open = true;
         next.summary.setAttribute("aria-current", "true");
@@ -876,25 +1141,36 @@ function setProject(project, options) {
         history.replaceState(null, "", "#" + targetSection);
     }
     refreshActiveLink(settings.scrollContent ? targetSection : undefined);
-    if (settings.scrollContent) {
-        const scrollOptions = {
-            block: settings.scrollBlock,
-            focus: settings.focusTarget
-        };
-        if (settings.scrollProjectTitle) {
-            scrollToProjectTitle(project, targetSection, scrollOptions);
-        } else {
-            scrollToSection(targetSection, scrollOptions);
-        }
-    } else {
-        queueScrollSpy();
-    }
     if (settings.scrollSubmenu && project !== previousProject) {
         scrollProjectSubmenu(next?.section);
     }
     if (project !== previousProject) {
         updateReferenceProject(project);
     }
+    loadProjectDocument(project)
+        .then(() => {
+            if (document.body.dataset.project !== project) {
+                return;
+            }
+            if (settings.scrollContent) {
+                const scrollOptions = {
+                    block: settings.scrollBlock,
+                    focus: settings.focusTarget
+                };
+                if (settings.scrollProjectTitle) {
+                    scrollToProjectTitle(project, targetSection, scrollOptions);
+                } else {
+                    scrollToSection(targetSection, scrollOptions);
+                }
+            } else {
+                queueScrollSpy();
+            }
+        })
+        .catch(() => {
+            if (document.body.dataset.project === project) {
+                queueScrollSpy();
+            }
+        });
 }
 
 function refreshActiveLink(nextActiveSectionId) {
@@ -922,28 +1198,65 @@ function refreshActiveLink(nextActiveSectionId) {
     }
 }
 
-projectOptions.forEach((summary) => {
-    summary.addEventListener("click", (event) => {
-        event.preventDefault();
-        const section = summary.closest("[data-project-nav]");
-        if (section.open && document.body.dataset.project === section.dataset.projectNav) {
-            section.open = false;
+function bindProjectOptions() {
+    refreshProjectSections();
+    projectOptions.forEach((summary) => {
+        if (summary.dataset.projectOptionBound === "true") {
             return;
         }
-        const project = section.dataset.projectNav;
-        setProject(project, {
-            updateHash: true,
-            forceHash: true,
-            scrollContent: true,
-            scrollProjectTitle: true,
-            scrollSubmenu: true
+        summary.dataset.projectOptionBound = "true";
+        const project = summary.closest("[data-project-nav]")?.dataset.projectNav;
+        summary.addEventListener("mouseenter", () => prefetchProjectDocument(project));
+        summary.addEventListener("focus", () => prefetchProjectDocument(project));
+        summary.addEventListener("click", (event) => {
+            event.preventDefault();
+            const section = summary.closest("[data-project-nav]");
+            if (section.open && document.body.dataset.project === section.dataset.projectNav) {
+                section.open = false;
+                return;
+            }
+            setProject(section.dataset.projectNav, {
+                updateHash: true,
+                forceHash: true,
+                scrollContent: true,
+                scrollProjectTitle: true,
+                scrollSubmenu: true
+            });
         });
+    });
+}
+
+document.querySelectorAll("[data-overview-doc-link]").forEach((link) => {
+    const targetProject = projectFromSectionId(decodeURIComponent(link.hash.slice(1)));
+    link.addEventListener("mouseenter", () => prefetchProjectDocument(targetProject));
+    link.addEventListener("focus", () => prefetchProjectDocument(targetProject));
+});
+
+projectCards.forEach((card) => {
+    const targetProject = projectFromSectionId(card.dataset.projectCardTarget) || card.dataset.projectCard;
+    card.addEventListener("mouseenter", () => prefetchProjectDocument(targetProject));
+    card.addEventListener("focus", () => prefetchProjectDocument(targetProject));
+    card.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+            return;
+        }
+        if (isInteractiveCardTarget(event.target, card)) {
+            return;
+        }
+        event.preventDefault();
+        openProjectCard(card);
     });
 });
 
 document.addEventListener("click", (event) => {
     if (clickIsOutsideOpenSidebar(event)) {
         closeSidebar();
+    }
+    const projectCard = event.target.closest("[data-project-card]");
+    if (projectCard && !isInteractiveCardTarget(event.target, projectCard)) {
+        event.preventDefault();
+        openProjectCard(projectCard);
+        return;
     }
     const searchResult = event.target.closest("[data-search-result]");
     if (searchResult) {
@@ -962,7 +1275,7 @@ document.addEventListener("click", (event) => {
                 focusTarget: true,
                 scrollSubmenu: project !== document.body.dataset.project
             });
-            const article = projectSections.get(project)?.article;
+            const article = projectSections.get(project)?.article || projectArticles.get(project);
             const referenceButton = article?.querySelector("[data-reference-open][data-reference-kind='" + CSS.escape(searchResult.dataset.searchReferenceKind || "configuration") + "']");
             if (referenceButton) {
                 openReference(referenceButton, {
@@ -1144,22 +1457,28 @@ if (window.matchMedia) {
         }
     });
 }
-const initialSectionId = decodeURIComponent(window.location.hash.slice(1));
-if (!initialSectionId || initialSectionId === overviewHash) {
-    setOverview(false);
-} else {
-    const initialProject = projectFromSectionId(initialSectionId);
-    if (initialProject) {
-        setProject(initialProject, {
-            sectionId: initialSectionId,
-            scrollContent: true
-        });
-    } else {
+function initializeRoute() {
+    const initialSectionId = decodeURIComponent(window.location.hash.slice(1));
+    if (!initialSectionId || initialSectionId === overviewHash) {
         setOverview(false);
+    } else {
+        const initialProject = projectFromSectionId(initialSectionId);
+        if (initialProject) {
+            setProject(initialProject, {
+                sectionId: initialSectionId,
+                scrollContent: true
+            });
+        } else {
+            setOverview(false);
+        }
     }
+    if (!document.body.classList.contains("overview-active")) {
+        queueScrollSpy();
+    }
+    updateProjectFilterUiState();
 }
-if (!document.body.classList.contains("overview-active")) {
-    queueScrollSpy();
-}
-updateProjectFilterUiState();
+
+loadSidebarMenu().catch(() => {
+    // The page can still open project documents from overview cards and search results.
+}).finally(initializeRoute);
 updateSearchUiState();
