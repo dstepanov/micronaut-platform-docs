@@ -3,6 +3,7 @@ package io.micronaut.docs;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 final class GitSupport {
@@ -27,5 +28,24 @@ final class GitSupport {
             throw new IllegalStateException("git " + String.join(" ", args) + " failed in " + workingDirectory + ": " + text);
         }
         return text;
+    }
+
+    static boolean isGitRepository(Path directory) {
+        return Files.exists(directory.resolve(".git"));
+    }
+
+    static void cloneRepository(
+        Path workingDirectory,
+        String repositoryUrl,
+        String branch,
+        String destination
+    ) throws IOException, InterruptedException {
+        Path destinationDirectory = workingDirectory.resolve(destination);
+        Files.createDirectories(destinationDirectory.getParent());
+        if (branch == null || branch.isBlank()) {
+            run(workingDirectory, "clone", repositoryUrl, destination);
+        } else {
+            run(workingDirectory, "clone", "--branch", branch, "--single-branch", repositoryUrl, destination);
+        }
     }
 }

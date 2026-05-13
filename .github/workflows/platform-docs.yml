@@ -57,7 +57,9 @@ jobs:
     name: Build guide docs shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    needs: plan
+    needs:
+      - plan
+      - search-smoke
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
@@ -92,6 +94,36 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  search-smoke:
+    name: Search smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: plan
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Render core and serde docs
+        run: ./gradlew -q -PplatformDocs.projectSlugs=core,serde verifyPlatformDocs
+
+      - name: Test search
+        run: ./gradlew :buildSrc:test --tests 'io.micronaut.docs.PlatformDocsSearchTest.search*'
+
   render:
     name: Render platform docs
     runs-on: ubuntu-latest
@@ -124,11 +156,6 @@ jobs:
 
       - name: Render and verify platform docs
         run: ./gradlew -q verifyRenderedPlatformDocs
-
-      - name: Test rendered platform docs
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-        run: ./gradlew :buildSrc:test
 
       - name: Upload generated site
         uses: actions/upload-artifact@v6

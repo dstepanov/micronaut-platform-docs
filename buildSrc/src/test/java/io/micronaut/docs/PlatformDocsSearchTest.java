@@ -45,7 +45,22 @@ final class PlatformDocsSearchTest {
     private static final String CONFIGURATION_PROPERTY_ANCHOR = "configuration-property-netty-default-allocator-num-heap-arenas";
 
     @Test
-    void apiTypeSearchNavigatesToDocumentationSection() throws IOException {
+    void searchFixtureContainsCoreSerdeAndRequiredIndexTerms() throws IOException {
+        assertRenderedSiteExists();
+        String html = Files.readString(INDEX_FILE, StandardCharsets.UTF_8);
+        assertTrue(html.contains("data-project=\"core\""), "The rendered search fixture must include Micronaut Core.");
+        assertTrue(html.contains("data-project=\"serde\""), "The rendered search fixture must include Micronaut Serialization.");
+
+        Path searchIndex = SITE_DIRECTORY.resolve("platform-assets/search-index.json");
+        assertTrue(Files.isRegularFile(searchIndex), "The rendered search fixture must include a search index.");
+        String indexJson = Files.readString(searchIndex, StandardCharsets.UTF_8);
+        assertTrue(indexJson.contains("applicationcontext"), "The search index must include compact API type terms.");
+        assertTrue(indexJson.contains("nettydefaultallocatornumheaparenas"), "The search index must include compact configuration property terms.");
+        assertTrue(indexJson.contains("\"project\":\"serde\""), "The search index must include serde entries.");
+    }
+
+    @Test
+    void searchNavigatesToCoreContentSerdeProjectAndConfigurationReference() throws IOException {
         try (SiteServer site = serveRenderedSite();
              Playwright playwright = createPlaywright();
              Browser browser = launchChromium(playwright)) {
@@ -54,6 +69,7 @@ final class PlatformDocsSearchTest {
             page.setDefaultNavigationTimeout(10_000);
             try {
                 page.navigate(site.indexUri().toString());
+
                 search(page, "ApplicationContext");
                 Locator firstResult = visibleSearchResult(page);
                 assertTrue(firstResult.innerText().contains("Documentation"), "Expected a documentation search result.");
@@ -61,28 +77,14 @@ final class PlatformDocsSearchTest {
                 page.waitForFunction("() => window.location.hash.length > 1 && document.body.dataset.project");
                 assertFalse(((String) page.evaluate("() => document.body.dataset.project")).isBlank());
                 page.waitForFunction("() => Boolean(document.querySelector('.platform-search-target'))");
-            } catch (TimeoutError e) {
-                throw new AssertionError("Searching for ApplicationContext did not produce a navigable result.", e);
-            } finally {
-                page.close();
-            }
-        }
-    }
 
-    @Test
-    void configurationPropertySearchOpensReferencePanelAtProperty() throws IOException {
-        try (SiteServer site = serveRenderedSite();
-             Playwright playwright = createPlaywright();
-             Browser browser = launchChromium(playwright)) {
-            Page page = browser.newPage(new Browser.NewPageOptions().setViewportSize(1280, 900));
-            page.setDefaultTimeout(10_000);
-            page.setDefaultNavigationTimeout(10_000);
-            try {
-                page.navigate(site.indexUri().toString());
+                search(page, "Micronaut Serialization");
+                clickSearchResultContaining(page, "Micronaut Serialization");
+                page.waitForFunction("() => document.body.dataset.project === 'serde'");
+
                 search(page, CONFIGURATION_PROPERTY);
                 String resultText = searchResultTextContaining(page, CONFIGURATION_PROPERTY);
                 assertTrue(resultText.contains("Configuration property"), "Expected a configuration property search result.");
-
                 clickSearchResultContaining(page, CONFIGURATION_PROPERTY);
 
                 page.waitForFunction("() => document.body.classList.contains('reference-open')");
@@ -100,7 +102,7 @@ final class PlatformDocsSearchTest {
                     CONFIGURATION_PROPERTY_ANCHOR
                 );
             } catch (TimeoutError e) {
-                throw new AssertionError("Searching for " + CONFIGURATION_PROPERTY + " did not open the matching configuration reference.", e);
+                throw new AssertionError("Search did not produce the expected navigable platform docs result.", e);
             } finally {
                 page.close();
             }

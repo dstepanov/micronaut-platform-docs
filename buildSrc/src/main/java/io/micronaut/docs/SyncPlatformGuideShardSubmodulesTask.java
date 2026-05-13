@@ -13,7 +13,6 @@ import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -84,10 +83,27 @@ public abstract class SyncPlatformGuideShardSubmodulesTask extends DefaultTask {
                 project.displayName(),
                 expectedTag
             );
-            if (Files.exists(submoduleDirectory.resolve(".git"))) {
-                getLogger().quiet("[{}/{}] {} submodule is already initialized.", index, selection.projects().size(), project.displayName());
+            if (GitSupport.isGitRepository(submoduleDirectory)) {
+                getLogger().quiet(
+                    "[{}/{}] {} submodule is already initialized.",
+                    index,
+                    selection.projects().size(),
+                    project.displayName()
+                );
             } else {
-                GitSupport.run(projectDirectory, "submodule", "update", "--init", project.submodulePath());
+                getLogger().quiet(
+                    "[{}/{}] Cloning {} from {}.",
+                    index,
+                    selection.projects().size(),
+                    project.displayName(),
+                    project.repositoryUrl()
+                );
+                GitSupport.cloneRepository(
+                    projectDirectory,
+                    project.repositoryUrl(),
+                    project.branch(),
+                    project.submodulePath()
+                );
             }
             assertCleanSubmodule(project, submoduleDirectory);
             GitSupport.run(submoduleDirectory, "fetch", "--tags", "--no-write-fetch-head", "origin");
