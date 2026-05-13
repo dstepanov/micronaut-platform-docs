@@ -256,7 +256,22 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         content = prefixIds(content, project.slug());
         content = rewriteUrls(content, project);
         content = optimizeImages(content);
+        tocItems = existingTocItems(tocItems, content);
         return new GuideDocument(project, title, version, tocItems, content);
+    }
+
+    private static List<TocItem> existingTocItems(List<TocItem> tocItems, String content) {
+        if (tocItems.isEmpty()) {
+            return tocItems;
+        }
+        Set<String> ids = new LinkedHashSet<>();
+        Matcher matcher = ID_ATTRIBUTE.matcher(content);
+        while (matcher.find()) {
+            ids.add(matcher.group(1));
+        }
+        return tocItems.stream()
+            .filter(item -> ids.contains(item.prefixedId()))
+            .toList();
     }
 
     private static void copyGeneratedDocs(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {
