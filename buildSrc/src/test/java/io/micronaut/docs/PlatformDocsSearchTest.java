@@ -148,12 +148,14 @@ final class PlatformDocsSearchTest {
 
                 page.locator("[data-project-option='core']").click();
                 waitForLoadedProject(page, "core");
+                assertNoVisibleDocumentationError(page, "core");
                 assertEquals("core", page.evaluate("() => document.body.dataset.project"));
 
                 page.locator(".topbar-title a[href='#platform']").click();
                 page.waitForFunction("() => document.body.classList.contains('overview-active')");
                 page.locator("[data-project-card='serde']").click();
                 waitForLoadedProject(page, "serde");
+                assertNoVisibleDocumentationError(page, "serde");
                 assertEquals("serde", page.evaluate("() => document.body.dataset.project"));
             } catch (TimeoutError e) {
                 throw new AssertionError("Project documentation did not load after clicking the sidebar project or overview card.", e);
@@ -345,10 +347,14 @@ final class PlatformDocsSearchTest {
             "project => {" +
                 "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
                 "const error = article?.querySelector('[data-document-error]');" +
-                "return Boolean(error?.hidden);" +
+                "if (!error?.hidden) {" +
+                "return false;" +
+                "}" +
+                "const style = window.getComputedStyle(error);" +
+                "return style.display === 'none';" +
                 "}",
             project
-        ), "Documentation error must stay hidden for " + project);
+        ), "Documentation error must stay hidden and visually absent for " + project);
     }
 
     private static Playwright createPlaywright() {

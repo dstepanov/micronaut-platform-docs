@@ -1,0 +1,16 @@
+{{#each documents}}
+                        <details class="project-section" data-project-nav="{{slug}}"{{#if selected}} open{{/if}}>
+                            <summary data-project-option="{{slug}}" aria-current="{{selected}}" title="{{displayName}}">
+                                {{{projectIcon}}}
+                                <span class="project-title">{{displayName}}</span>
+{{#if version}}
+                                <small>{{version}}</small>
+{{/if}}
+                            </summary>
+                            <div class="toc-tree">
+{{#each toc}}
+{{> toc-node}}
+{{/each}}
+                            </div>
+                        </details>
+{{/each}}
