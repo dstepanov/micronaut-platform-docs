@@ -256,22 +256,40 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         content = prefixIds(content, project.slug());
         content = rewriteUrls(content, project);
         content = optimizeImages(content);
-        tocItems = existingTocItems(tocItems, content);
+        content = withProjectAnchor(project, content);
+        tocItems = existingTocItems(project, tocItems, content);
         return new GuideDocument(project, title, version, tocItems, content);
     }
 
-    private static List<TocItem> existingTocItems(List<TocItem> tocItems, String content) {
+    private static String withProjectAnchor(GuideProject project, String content) {
+        String anchor = projectAnchor(project);
+        if (content.contains("id=\"" + anchor + "\"")) {
+            return content;
+        }
+        return "<span class=\"project-document-anchor\" id=\"" + anchor + "\" aria-hidden=\"true\"></span>\n" + content;
+    }
+
+    private static String projectAnchor(GuideProject project) {
+        return project.slug() + "-docs";
+    }
+
+    private static List<TocItem> existingTocItems(GuideProject project, List<TocItem> tocItems, String content) {
         if (tocItems.isEmpty()) {
-            return tocItems;
+            return List.of(projectTocItem(project));
         }
         Set<String> ids = new LinkedHashSet<>();
         Matcher matcher = ID_ATTRIBUTE.matcher(content);
         while (matcher.find()) {
             ids.add(matcher.group(1));
         }
-        return tocItems.stream()
+        List<TocItem> existing = tocItems.stream()
             .filter(item -> ids.contains(item.prefixedId()))
             .toList();
+        return existing.isEmpty() ? List.of(projectTocItem(project)) : existing;
+    }
+
+    private static TocItem projectTocItem(GuideProject project) {
+        return new TocItem(0, "", "Docs", "docs", projectAnchor(project));
     }
 
     private static void copyGeneratedDocs(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {

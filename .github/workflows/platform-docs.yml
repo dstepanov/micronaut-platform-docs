@@ -24,7 +24,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Xmx4g
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -65,7 +65,7 @@ jobs:
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Xmx4g
       PLATFORM_DOCS_GUIDE_SHARD_COUNT: ${{ matrix.shard_count }}
       PLATFORM_DOCS_GUIDE_SHARD_INDEX: ${{ matrix.shard }}
     steps:
@@ -101,7 +101,7 @@ jobs:
     needs: plan
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Xmx4g
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - name: Checkout
@@ -131,7 +131,7 @@ jobs:
     needs: build-guides
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Xmx4g
     steps:
       - name: Checkout
         uses: actions/checkout@v6
