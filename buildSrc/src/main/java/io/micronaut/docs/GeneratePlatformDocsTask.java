@@ -56,6 +56,13 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String LUCIDE_ICON_ROOT = "META-INF/resources/webjars/lucide-static/%s/icons/";
     private static final Set<String> GUIDE_THEME_DIRECTORIES = Set.of("css/", "fonts/", "img/default/", "js/", "style/");
     private static final Set<String> GENERATED_DOC_THEME_DIRECTORIES = Set.of("css/", "fonts/", "js/", "style/");
+    private static final Set<String> CONTENT_SEARCH_STOP_WORDS = Set.of(
+        "about", "above", "after", "again", "against", "also", "another", "because", "before", "being", "below",
+        "between", "cannot", "could", "does", "doing", "during", "each", "either", "example", "first", "following",
+        "from", "have", "into", "more", "most", "must", "only", "other", "over", "same", "should", "some", "such",
+        "than", "that", "their", "then", "there", "these", "this", "those", "through", "using", "when", "where",
+        "which", "while", "with", "would", "your"
+    );
     private static final String EMBEDDED_REFERENCE_STYLE = """
 
         <style>
@@ -765,6 +772,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
                     ""
                 ));
             }
+            items.addAll(contentSearchItems(document));
             String configurationReferencePath = generatedDocumentPath(projectDirectory, project, "guide/configurationreference.html");
             if (!configurationReferencePath.isBlank()) {
                 Path configurationReferenceFile = projectDirectory.resolve(project.generatedDocsPath()).resolve("guide/configurationreference.html");
@@ -785,8 +793,18 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
 
         Map<String, LinkedHashSet<Integer>> terms = new LinkedHashMap<>();
         for (int i = 0; i < items.size(); i++) {
-            for (String token : searchTokens(items.get(i).searchText())) {
+            SearchItem item = items.get(i);
+            boolean contentItem = "content".equals(item.kind());
+            LinkedHashSet<String> tokens = new LinkedHashSet<>(searchTokens(item.searchText()));
+            tokens.addAll(searchTokens(item.title()));
+            for (String token : tokens) {
+                if (contentItem && !isContentSearchToken(token)) {
+                    continue;
+                }
                 addSearchTerm(terms, token, i);
+                if (contentItem) {
+                    continue;
+                }
                 int prefixLength = Math.min(token.length(), 20);
                 for (int length = 2; length < prefixLength; length++) {
                     addSearchTerm(terms, token.substring(0, length), i);
@@ -831,6 +849,69 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return json.toString();
     }
 
+    private static boolean isContentSearchToken(String token) {
+        return token.length() >= 3
+            && token.length() <= 60
+            && !CONTENT_SEARCH_STOP_WORDS.contains(token)
+            && !token.chars().allMatch(Character::isDigit);
+    }
+
+    private static List<SearchItem> contentSearchItems(GuideDocument document) {
+        GuideProject project = document.project();
+        List<SectionStart> sections = sectionStarts(document);
+        List<SearchItem> items = new ArrayList<>();
+        for (int i = 0; i < sections.size(); i++) {
+            SectionStart section = sections.get(i);
+            int end = i + 1 < sections.size() ? sections.get(i + 1).offset() : document.contentHtml().length();
+            String html = document.contentHtml().substring(section.offset(), end);
+            String content = searchableHtmlText(html);
+            if (searchTokens(content).isEmpty()) {
+                continue;
+            }
+            String title = normalizePlainText(stripTags(section.item().titleHtml()));
+            items.add(new SearchItem(
+                "content",
+                project.slug(),
+                project.displayName(),
+                searchResultTitle(project, title),
+                section.item().prefixedId(),
+                project.displayName(),
+                project.displayName() + " " + project.slug() + " " + content,
+                ""
+            ));
+        }
+        return items;
+    }
+
+    private static List<SectionStart> sectionStarts(GuideDocument document) {
+        List<SectionStart> sections = new ArrayList<>();
+        for (TocItem item : document.tocItems()) {
+            int offset = indexOfId(document.contentHtml(), item.prefixedId());
+            if (offset >= 0) {
+                sections.add(new SectionStart(item, offset));
+            }
+        }
+        sections.sort(Comparator.comparingInt(SectionStart::offset));
+        return sections;
+    }
+
+    private static int indexOfId(String html, String id) {
+        Matcher matcher = ID_ATTRIBUTE.matcher(html);
+        while (matcher.find()) {
+            if (id.equals(matcher.group(1))) {
+                return matcher.start();
+            }
+        }
+        return -1;
+    }
+
+    private static String searchableHtmlText(String html) {
+        return normalizePlainText(html
+            .replaceAll("(?is)<script\\b[^>]*>.*?</script>", " ")
+            .replaceAll("(?is)<style\\b[^>]*>.*?</style>", " ")
+            .replaceAll("(?is)<[^>]+>", " "));
+    }
+
     private static void addSearchTerm(Map<String, LinkedHashSet<Integer>> terms, String term, int itemIndex) {
         terms.computeIfAbsent(term, ignored -> new LinkedHashSet<>()).add(itemIndex);
     }
@@ -869,14 +950,22 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     }
 
     private static List<String> searchTokens(String value) {
-        String normalized = normalizePlainText(value).toLowerCase(Locale.ROOT);
+        String plainText = normalizePlainText(value);
+        String normalized = plainText.toLowerCase(Locale.ROOT);
         LinkedHashSet<String> tokens = new LinkedHashSet<>();
         addSearchTokens(tokens, normalized.replaceAll("[^a-z0-9]+", " "));
+        addSearchTokens(tokens, splitCamelCase(plainText).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " "));
         String compact = normalized.replaceAll("[^a-z0-9]+", "");
         if (compact.length() > 1 && compact.length() <= 40) {
             tokens.add(compact);
         }
         return List.copyOf(tokens);
+    }
+
+    private static String splitCamelCase(String value) {
+        return value
+            .replaceAll("([A-Z]+)([A-Z][a-z])", "$1 $2")
+            .replaceAll("([a-z0-9])([A-Z])", "$1 $2");
     }
 
     private static void addSearchTokens(LinkedHashSet<String> tokens, String value) {
@@ -1258,6 +1347,9 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     }
 
     private record ConfigurationProperty(String name, String anchor, String description) {
+    }
+
+    private record SectionStart(TocItem item, int offset) {
     }
 
     private record TocItem(int level, String numberHtml, String titleHtml, String originalId, String prefixedId) {

@@ -125,6 +125,11 @@ jobs:
       - name: Render and verify platform docs
         run: ./gradlew -q verifyRenderedPlatformDocs
 
+      - name: Test rendered platform docs
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: ./gradlew :buildSrc:test
+
       - name: Upload generated site
         uses: actions/upload-artifact@v6
         with:

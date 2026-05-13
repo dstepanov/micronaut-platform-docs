@@ -83,18 +83,30 @@ function escapeHtml(value) {
         .replaceAll("\"", "&quot;");
 }
 
-function normalizeSearchText(value) {
+function splitCamelCase(value) {
     return String(value || "")
+        .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+}
+
+function normalizeSearchText(value) {
+    return splitCamelCase(value)
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, " ")
         .trim();
 }
 
 function searchTokens(value) {
-    return normalizeSearchText(value)
+    const tokens = new Set(normalizeSearchText(value)
         .split(/\s+/)
-        .filter((token) => token.length > 1)
-        .slice(0, 6);
+        .filter((token) => token.length > 1));
+    const compact = String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+    if (compact.length > 1 && compact.length <= 40) {
+        tokens.add(compact);
+    }
+    return Array.from(tokens).slice(0, 6);
 }
 
 function projectFilterTokens(value) {
@@ -193,9 +205,7 @@ function searchDisplayTitle(projectTitle, title) {
 }
 
 function addSearchIndexTerms(index, itemId, value) {
-    const tokens = normalizeSearchText(value)
-        .split(/\s+/)
-        .filter((token) => token.length > 1);
+    const tokens = searchTokens(value);
     const allTerms = new Set();
     for (const token of tokens) {
         const prefixLength = Math.min(token.length, 20);
@@ -396,7 +406,7 @@ function renderSearchResults(results, query) {
             ? ` data-search-reference-url="${escapeHtml(item.referenceUrl)}" data-search-reference-kind="configuration" data-search-project="${escapeHtml(item.project)}"`
             : "";
         const resultLabel = isProject ? "Project" : item.projectTitle;
-        const resultDetail = isProject ? "Project documentation" : isConfiguration ? "Configuration property" : "Documentation section";
+        const resultDetail = isProject ? "Project documentation" : isConfiguration ? "Configuration property" : item.kind === "content" ? "Documentation match" : "Documentation section";
         const resultTitle = isProject || isConfiguration ? item.title : searchDisplayTitle(item.projectTitle, item.title);
         return `
             <a class="site-search-result" href="${escapeHtml(item.href)}" data-search-result${projectAttribute}${referenceAttribute} aria-selected="false">
@@ -776,6 +786,18 @@ function updateReferenceProject(project) {
     }
 }
 
+function closeSidebar() {
+    document.body.classList.remove("sidebar-open");
+    sidebarToggle?.setAttribute("aria-expanded", "false");
+}
+
+function clickIsOutsideOpenSidebar(event) {
+    return document.body.classList.contains("sidebar-open")
+        && window.matchMedia("(max-width: 1100px)").matches
+        && !event.target.closest(".sidebar")
+        && !event.target.closest(".sidebar-toggle");
+}
+
 function clearActiveLink() {
     if (activeLink) {
         activeLink.classList.remove("active");
@@ -920,6 +942,9 @@ projectOptions.forEach((summary) => {
 });
 
 document.addEventListener("click", (event) => {
+    if (clickIsOutsideOpenSidebar(event)) {
+        closeSidebar();
+    }
     const searchResult = event.target.closest("[data-search-result]");
     if (searchResult) {
         closeSearchResults();
@@ -946,8 +971,7 @@ document.addEventListener("click", (event) => {
                     projectName: referenceButton.dataset.referenceProjectName
                 });
             }
-            document.body.classList.remove("sidebar-open");
-            sidebarToggle?.setAttribute("aria-expanded", "false");
+            closeSidebar();
             return;
         }
     } else if (searchRoot && !searchRoot.contains(event.target)) {
@@ -985,8 +1009,7 @@ document.addEventListener("click", (event) => {
             forceHash: true,
             scrollContent: true
         });
-        document.body.classList.remove("sidebar-open");
-        sidebarToggle?.setAttribute("aria-expanded", "false");
+        closeSidebar();
         return;
     }
     const targetProject = projectFromSectionId(targetId);
@@ -1003,8 +1026,7 @@ document.addEventListener("click", (event) => {
             scrollProjectTitle: Boolean(hashLink.closest("[data-overview-doc-link], [data-search-project-link]")),
             scrollSubmenu: targetProject !== document.body.dataset.project
         });
-        document.body.classList.remove("sidebar-open");
-        sidebarToggle?.setAttribute("aria-expanded", "false");
+        closeSidebar();
         window.setTimeout(queueScrollSpy, 0);
     }
 });
