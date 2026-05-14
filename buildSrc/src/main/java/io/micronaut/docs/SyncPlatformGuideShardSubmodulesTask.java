@@ -106,8 +106,17 @@ public abstract class SyncPlatformGuideShardSubmodulesTask extends DefaultTask {
                 );
             }
             assertCleanSubmodule(project, submoduleDirectory);
-            GitSupport.run(submoduleDirectory, "fetch", "--tags", "--no-write-fetch-head", "origin");
-            GitSupport.run(submoduleDirectory, "switch", "--detach", expectedTag);
+            GitSupport.PlatformCheckout checkout = GitSupport.checkoutPlatformVersion(submoduleDirectory, expectedTag, project.branch());
+            if (checkout.branchFallback()) {
+                getLogger().quiet(
+                    "[{}/{}] {} tag {} is missing; using {}.",
+                    index,
+                    selection.projects().size(),
+                    project.displayName(),
+                    expectedTag,
+                    checkout.ref()
+                );
+            }
         }
     }
 

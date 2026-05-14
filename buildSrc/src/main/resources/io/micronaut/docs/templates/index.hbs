@@ -99,7 +99,15 @@
 {{#each categories}}
                         <section class="project-category" data-project-category="{{slug}}">
                             <header class="project-category-header">
-                                <h2>{{name}}</h2>
+                                <div class="project-category-title">
+                                    <span class="project-category-icon" aria-hidden="true">{{{icon}}}</span>
+                                    <div>
+                                        <h2>{{name}}</h2>
+{{#if description}}
+                                        <p>{{description}}</p>
+{{/if}}
+                                    </div>
+                                </div>
                             </header>
                             <div class="project-card-grid">
 {{#each documents}}

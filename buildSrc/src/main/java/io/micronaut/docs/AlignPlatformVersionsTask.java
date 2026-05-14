@@ -45,8 +45,17 @@ public abstract class AlignPlatformVersionsTask extends DefaultTask {
             assertCleanSubmodule(project, submoduleDirectory);
             String expectedTag = "v" + expectedVersion;
             getLogger().quiet("[{}/{}] {} -> {}", ++index, projects.size(), project.displayName(), expectedTag);
-            GitSupport.run(submoduleDirectory, "fetch", "--tags", "origin");
-            GitSupport.run(submoduleDirectory, "switch", "--detach", expectedTag);
+            GitSupport.PlatformCheckout checkout = GitSupport.checkoutPlatformVersion(submoduleDirectory, expectedTag, project.branch());
+            if (checkout.branchFallback()) {
+                getLogger().quiet(
+                    "[{}/{}] {} tag {} is missing; using {}.",
+                    index,
+                    projects.size(),
+                    project.displayName(),
+                    expectedTag,
+                    checkout.ref()
+                );
+            }
         }
         getLogger().quiet("Aligned {} platform project submodules.", projects.size());
     }

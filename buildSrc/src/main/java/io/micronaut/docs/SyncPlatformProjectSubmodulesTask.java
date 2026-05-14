@@ -72,16 +72,26 @@ public abstract class SyncPlatformProjectSubmodulesTask extends DefaultTask {
                 );
                 added++;
             }
-            checkoutPlatformTag(projectDirectory, project, submoduleDirectory, expectedTag);
+            GitSupport.PlatformCheckout checkout = checkoutPlatformVersion(projectDirectory, project, submoduleDirectory, expectedTag);
+            if (checkout.branchFallback()) {
+                getLogger().quiet(
+                    "[{}/{}] {} tag {} is missing; using {}.",
+                    index,
+                    projects.size(),
+                    project.displayName(),
+                    expectedTag,
+                    checkout.ref()
+                );
+            }
         }
         getLogger().quiet("Submodule sync complete: {} added, {} already present, {} checked out.", added, existing, projects.size());
     }
 
-    private static void checkoutPlatformTag(Path projectDirectory, GuideProject project, Path submoduleDirectory, String expectedTag) throws IOException, InterruptedException {
+    private static GitSupport.PlatformCheckout checkoutPlatformVersion(Path projectDirectory, GuideProject project, Path submoduleDirectory, String expectedTag) throws IOException, InterruptedException {
         assertCleanSubmodule(project, submoduleDirectory);
-        GitSupport.run(submoduleDirectory, "fetch", "--tags", "--no-write-fetch-head", "origin");
-        GitSupport.run(submoduleDirectory, "switch", "--detach", expectedTag);
+        GitSupport.PlatformCheckout checkout = GitSupport.checkoutPlatformVersion(submoduleDirectory, expectedTag, project.branch());
         GitSupport.run(projectDirectory, "add", ".gitmodules", project.submodulePath());
+        return checkout;
     }
 
     private static void assertCleanSubmodule(GuideProject project, Path submoduleDirectory) throws IOException, InterruptedException {

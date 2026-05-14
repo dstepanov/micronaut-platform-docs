@@ -22,6 +22,12 @@ gradle/
                      Generated project manifest used by the Gradle tasks
   platform-doc-repositories.properties
                      Generated cache of repository creation dates used for sorting
+  platform-doc-categories.properties
+                     Curated docs-index category metadata for the overview cards
+  platform-doc-descriptions.properties
+                     Curated short and long descriptions for overview cards
+  platform-doc-icons.properties
+                     Curated project icon mappings for sidebar and overview cards
   platform-doc-shards.properties
                      Preferred GitHub Actions guide-build shard plan
 repos/
@@ -114,7 +120,9 @@ The generator then:
 - copies generated guide content to `build/site/assets/<project>/docs`
 - copies shared Micronaut guide assets from `grails-doc-files.jar` to `build/site/guide-assets`
 - copies local UI assets to `build/site/platform-assets`
-- renders the shell and sidebar with Handlebars templates
+- renders the shell, sidebar, and overview categories with Handlebars templates
+
+The overview and sidebar grouping is curated in `gradle/platform-doc-categories.properties`. It is adapted from the older `micronaut-docs-index` module taxonomy while keeping the generated page local, static, and aligned to the platform manifest. The first matching category wins, so the `Most Popular` category is intentionally listed first.
 
 Open the generated page at:
 
@@ -212,6 +220,7 @@ Review changes to:
 - `.gitmodules`
 - `gradle/platform-doc-projects.properties`
 - `gradle/platform-doc-repositories.properties`
+- `gradle/platform-doc-categories.properties` when category assignments intentionally change
 - submodule pointers under `repos/*`
 - generated output under `build/site` when validating locally
 
@@ -220,6 +229,7 @@ Review changes to:
 The site is generated as plain static HTML, CSS, and JavaScript from Gradle. It provides:
 
 - a project selector
+- docs-index-inspired category grouping on the overview page and sidebar
 - first-level expandable project sections in the sidebar
 - the active Micronaut Platform checkout in the top bar
 - a sticky sidebar

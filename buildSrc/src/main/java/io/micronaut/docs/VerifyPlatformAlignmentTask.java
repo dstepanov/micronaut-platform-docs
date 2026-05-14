@@ -78,16 +78,7 @@ public abstract class VerifyPlatformAlignmentTask extends DefaultTask {
             String expectedTag = "v" + expectedVersion;
             Path submoduleDirectory = projectDirectory.resolve(project.submodulePath());
             getLogger().quiet("[{}/{}] {} expects {}", ++index, selectedProjects.size(), project.displayName(), expectedTag);
-            String tags = GitSupport.run(submoduleDirectory, "tag", "--points-at", "HEAD");
-            if (!tags.lines().anyMatch(expectedTag::equals)) {
-                throw new IllegalStateException(project.displayName()
-                    + " must be checked out at tag "
-                    + expectedTag
-                    + " from "
-                    + project.platformVersionKey()
-                    + ", but HEAD has tags: "
-                    + (tags.isBlank() ? "<none>" : tags.replace('\n', ' ').trim()));
-            }
+            verifyProjectAlignment(project, submoduleDirectory, expectedTag);
         }
         getLogger().quiet(
             "Verified platform alignment for {} of {} project submodules (shard {}/{}).",
@@ -96,5 +87,52 @@ public abstract class VerifyPlatformAlignmentTask extends DefaultTask {
             selection.shardIndex() + 1,
             selection.shardCount()
         );
+    }
+
+    private void verifyProjectAlignment(GuideProject project, Path submoduleDirectory, String expectedTag) throws IOException, InterruptedException {
+        GitSupport.fetchTags(submoduleDirectory);
+        String headCommit = GitSupport.resolveCommit(submoduleDirectory, "HEAD");
+        if (GitSupport.tagExists(submoduleDirectory, expectedTag)) {
+            String expectedCommit = GitSupport.resolveCommit(submoduleDirectory, expectedTag);
+            if (!expectedCommit.equals(headCommit)) {
+                throw new IllegalStateException(project.displayName()
+                    + " must be checked out at tag "
+                    + expectedTag
+                    + " from "
+                    + project.platformVersionKey()
+                    + ", but HEAD is "
+                    + headCommit
+                    + " and "
+                    + expectedTag
+                    + " is "
+                    + expectedCommit);
+            }
+            return;
+        }
+
+        GitSupport.fetchRemoteBranch(submoduleDirectory, project.branch());
+        String fallbackRef = GitSupport.remoteBranchRef(project.branch());
+        if (!GitSupport.commitRefExists(submoduleDirectory, fallbackRef)) {
+            throw new IllegalStateException(project.displayName()
+                + " is missing platform tag "
+                + expectedTag
+                + " and fallback branch "
+                + fallbackRef);
+        }
+        String fallbackCommit = GitSupport.resolveCommit(submoduleDirectory, fallbackRef);
+        if (!fallbackCommit.equals(headCommit)) {
+            throw new IllegalStateException(project.displayName()
+                + " must be checked out at tag "
+                + expectedTag
+                + " or fallback branch "
+                + fallbackRef
+                + ", but HEAD is "
+                + headCommit
+                + " and "
+                + fallbackRef
+                + " is "
+                + fallbackCommit);
+        }
+        getLogger().quiet("{} tag {} is missing; verified fallback {}.", project.displayName(), expectedTag, fallbackRef);
     }
 }

@@ -148,6 +148,10 @@ function applyProjectFilter() {
             visibleProjects++;
         }
     }
+    document.querySelectorAll("[data-sidebar-category]").forEach((category) => {
+        category.hidden = !Array.from(category.querySelectorAll("[data-project-nav]"))
+            .some((section) => !section.hidden);
+    });
     if (projectFilterEmpty) {
         projectFilterEmpty.hidden = !tokens.length || visibleProjects > 0;
     }
