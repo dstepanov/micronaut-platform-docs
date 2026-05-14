@@ -149,15 +149,24 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         }
     }
 
-    private static Set<String> projectSections(String html, String slug) {
+    static Set<String> projectSections(String html, String slug) {
         Set<String> sections = new LinkedHashSet<>();
-        Matcher matcher = SECTION.matcher(html);
-        String prefix = slug + "-";
+        String marker = "data-project-nav=\"" + slug + "\"";
+        int markerIndex = html.indexOf(marker);
+        if (markerIndex < 0) {
+            return sections;
+        }
+        int start = html.lastIndexOf("<details class=\"project-section\"", markerIndex);
+        if (start < 0) {
+            start = markerIndex;
+        }
+        int end = html.indexOf("<details class=\"project-section\"", markerIndex + marker.length());
+        if (end < 0) {
+            end = html.length();
+        }
+        Matcher matcher = SECTION.matcher(html.substring(start, end));
         while (matcher.find()) {
-            String section = matcher.group(1);
-            if (section.startsWith(prefix)) {
-                sections.add(section);
-            }
+            sections.add(matcher.group(1));
         }
         return sections;
     }
