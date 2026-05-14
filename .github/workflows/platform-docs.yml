@@ -59,7 +59,7 @@ jobs:
     timeout-minutes: 360
     needs:
       - plan
-      - search-smoke
+      - test-layout
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
@@ -94,8 +94,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  search-smoke:
-    name: Search smoke test
+  test-layout:
+    name: Test two-doc layout
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: plan
@@ -118,11 +118,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Render core and serde docs
-        run: ./gradlew -q -PplatformDocs.projectSlugs=core,serde verifyPlatformDocs
-
-      - name: Test search
-        run: ./gradlew :buildSrc:test --tests 'io.micronaut.docs.PlatformDocsSearchTest.search*'
+      - name: Test two-doc layout
+        run: |
+          ./gradlew -q -PplatformDocs.projectSlugs=core,serde verifyPlatformDocs
+          ./gradlew :buildSrc:test
 
   render:
     name: Render platform docs
