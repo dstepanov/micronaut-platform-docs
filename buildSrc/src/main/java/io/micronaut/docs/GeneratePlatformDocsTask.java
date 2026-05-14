@@ -44,6 +44,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String SITE_ASSET_PATH = "platform-assets";
     private static final String GUIDE_THEME_ASSET_PATH = "guide-assets";
     private static final String OVERVIEW_SECTION_ID = "platform";
+    private static final String CATEGORY_COUNT = "category.count";
     private static final int CARD_DESCRIPTION_MIN_WORDS = 24;
     private static final int CARD_DESCRIPTION_MAX_WORDS = 30;
     private static final String GUIDE_THEME_RESOURCE = "grails-doc-files.jar";
@@ -62,25 +63,6 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         "from", "have", "into", "more", "most", "must", "only", "other", "over", "same", "should", "some", "such",
         "than", "that", "their", "then", "there", "these", "this", "those", "through", "using", "when", "where",
         "which", "while", "with", "would", "your"
-    );
-    private static final List<ProjectCategory> PROJECT_CATEGORIES = List.of(
-        new ProjectCategory("Most Popular", Set.of("core", "data", "security", "graphql", "spring", "kafka", "openapi")),
-        new ProjectCategory("AI", Set.of("langchain4j", "mcp")),
-        new ProjectCategory("Dev & Test", Set.of("test", "test-resources", "control-panel")),
-        new ProjectCategory("Build", Set.of("aot", "gradle", "sourcegen", "openrewrite")),
-        new ProjectCategory("Data Access", Set.of("cassandra", "coherence", "eclipsestore", "mongodb", "neo4j", "r2dbc", "redis", "sql")),
-        new ProjectCategory("Database Migration", Set.of("flyway", "liquibase")),
-        new ProjectCategory("Errors", Set.of("problem-json")),
-        new ProjectCategory("Messaging", Set.of("jms", "mqtt", "nats", "pulsar", "rabbitmq")),
-        new ProjectCategory("Analytics", Set.of("elasticsearch", "jmx", "micrometer", "opensearch", "tracing")),
-        new ProjectCategory("API", Set.of("grpc", "guice", "jackson-xml", "jaxrs", "json-schema", "serde", "servlet")),
-        new ProjectCategory("Cloud", Set.of("aws", "azure", "discovery-client", "gcp", "kubernetes", "object-storage", "oracle-cloud")),
-        new ProjectCategory("Configuration", Set.of("logging", "toml")),
-        new ProjectCategory("Languages", Set.of("groovy", "kotlin", "graal-languages")),
-        new ProjectCategory("Misc", Set.of("acme", "cache", "chatbots", "email", "picocli", "session")),
-        new ProjectCategory("Reactive", Set.of("reactor", "rxjava3")),
-        new ProjectCategory("Views", Set.of("multitenancy", "rss", "views")),
-        new ProjectCategory("Validation", Set.of("hibernate-validator", "validation"))
     );
     private static final String EMBEDDED_REFERENCE_STYLE = """
 
@@ -161,6 +143,11 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getIconCatalog();
 
+    @InputFile
+    @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getCategoryCatalog();
+
     @OutputDirectory
     public abstract DirectoryProperty getOutputDirectory();
 
@@ -185,6 +172,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         Map<String, String> platformVersions = PlatformVersions.read(getPlatformVersionCatalog().get().getAsFile().toPath());
         Properties descriptions = readDescriptionCatalog();
         Properties projectIcons = readIconCatalog();
+        List<ProjectCategory> categories = readCategoryCatalog();
         getLogger().quiet("Copying shared Micronaut guide theme assets.");
         copyGuideThemeAssets(outputDirectory);
         List<GuideDocument> documents = new ArrayList<>();
@@ -202,8 +190,8 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
 
         getLogger().quiet("Writing platform UI assets.");
-        writeSiteAssets(outputDirectory, projectDirectory, documents, descriptions, projectIcons);
-        Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents, descriptions, projectIcons)), StandardCharsets.UTF_8);
+        writeSiteAssets(outputDirectory, projectDirectory, documents, descriptions, projectIcons, categories);
+        Files.writeString(outputDirectory.resolve("index.html"), renderTemplate("index", siteModel(projectDirectory, documents, descriptions, projectIcons, categories)), StandardCharsets.UTF_8);
         getLogger().quiet("Generated platform docs site: {}", outputDirectory.resolve("index.html"));
     }
 
@@ -237,6 +225,78 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             properties.load(input);
         }
         return properties;
+    }
+
+    private List<ProjectCategory> readCategoryCatalog() throws IOException {
+        if (!getCategoryCatalog().isPresent()) {
+            return defaultProjectCategories();
+        }
+        Path catalog = getCategoryCatalog().get().getAsFile().toPath();
+        if (!Files.isRegularFile(catalog)) {
+            return defaultProjectCategories();
+        }
+
+        getLogger().quiet("Reading platform docs categories from {}.", catalog);
+        Properties properties = new Properties();
+        try (InputStream input = Files.newInputStream(catalog)) {
+            properties.load(input);
+        }
+
+        int count = Integer.parseInt(properties.getProperty(CATEGORY_COUNT, "0"));
+        List<ProjectCategory> categories = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            String prefix = "category." + i + ".";
+            String name = requiredCategoryProperty(properties, prefix + "name");
+            categories.add(new ProjectCategory(
+                properties.getProperty(prefix + "slug", categorySlug(name)),
+                name,
+                properties.getProperty(prefix + "icon", "book-open").trim(),
+                properties.getProperty(prefix + "description", "").trim(),
+                categoryProjects(properties.getProperty(prefix + "projects", ""))
+            ));
+        }
+        return categories.isEmpty() ? defaultProjectCategories() : categories;
+    }
+
+    private static String requiredCategoryProperty(Properties properties, String key) {
+        String value = properties.getProperty(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("Platform docs category catalog is missing " + key);
+        }
+        return value.trim();
+    }
+
+    private static Set<String> categoryProjects(String value) {
+        Set<String> projects = new LinkedHashSet<>();
+        for (String project : value.split(",")) {
+            String slug = project.trim();
+            if (!slug.isBlank()) {
+                projects.add(slug);
+            }
+        }
+        return projects;
+    }
+
+    private static List<ProjectCategory> defaultProjectCategories() {
+        return List.of(
+            new ProjectCategory("most-popular", "Most Popular", "book-open", "", Set.of("core", "data", "security", "graphql", "spring", "kafka", "openapi")),
+            new ProjectCategory("api", "API", "route", "", Set.of("grpc", "guice", "jackson-xml", "jaxrs", "json-schema", "serde", "servlet")),
+            new ProjectCategory("build", "Build", "code", "", Set.of("aot", "gradle", "sourcegen", "openrewrite")),
+            new ProjectCategory("cloud", "Cloud", "cloud", "", Set.of("aws", "azure", "discovery-client", "gcp", "kubernetes", "object-storage", "oracle-cloud")),
+            new ProjectCategory("configuration", "Configuration", "sliders-horizontal", "", Set.of("logging", "toml")),
+            new ProjectCategory("data-access", "Data Access", "database", "", Set.of("cassandra", "coherence", "eclipsestore", "mongodb", "neo4j", "r2dbc", "redis", "sql")),
+            new ProjectCategory("database-migration", "Database Migration", "database-zap", "", Set.of("flyway", "liquibase")),
+            new ProjectCategory("errors", "Errors", "braces", "", Set.of("problem-json")),
+            new ProjectCategory("languages", "Languages", "code", "", Set.of("groovy", "kotlin", "graal-languages")),
+            new ProjectCategory("messaging", "Messaging", "message-square", "", Set.of("jms", "mqtt", "nats", "pulsar", "rabbitmq")),
+            new ProjectCategory("misc", "Misc", "boxes", "", Set.of("acme", "cache", "chatbots", "email", "picocli", "session")),
+            new ProjectCategory("reactive", "Reactive", "workflow", "", Set.of("reactor", "rxjava3")),
+            new ProjectCategory("views", "Views", "layout-template", "", Set.of("multitenancy", "rss", "views")),
+            new ProjectCategory("dev-and-test", "Dev & Test", "test-tube-2", "", Set.of("test", "test-resources", "control-panel")),
+            new ProjectCategory("ai", "AI", "bot", "", Set.of("langchain4j", "mcp")),
+            new ProjectCategory("validation", "Validation", "check-circle", "", Set.of("hibernate-validator", "validation")),
+            new ProjectCategory("other", "Other", "folder-git-2", "", Set.of())
+        );
     }
 
     private static GuideDocument parseGuide(GuideProject project, String html, Path tocFile, String platformVersion) throws IOException {
@@ -600,11 +660,11 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return Math.min(queryIndex, hashIndex);
     }
 
-    private static void writeSiteAssets(Path outputDirectory, Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException {
+    private static void writeSiteAssets(Path outputDirectory, Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons, List<ProjectCategory> categories) throws IOException {
         Path siteAssets = outputDirectory.resolve(SITE_ASSET_PATH);
         Files.createDirectories(siteAssets);
         writeProjectDocuments(siteAssets, documents);
-        writeSidebarMenu(siteAssets, projectDirectory, documents, descriptions, projectIcons);
+        writeSidebarMenu(siteAssets, projectDirectory, documents, descriptions, projectIcons, categories);
         Files.writeString(siteAssets.resolve("site.css"), resourceText(SITE_CSS_RESOURCE), StandardCharsets.UTF_8);
         Files.writeString(siteAssets.resolve("site.js"), renderTemplate("assets/site.js", scriptModel(documents)), StandardCharsets.UTF_8);
         String searchIndexJson = searchIndexJson(projectDirectory, documents, descriptions);
@@ -637,8 +697,8 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
     }
 
-    private static void writeSidebarMenu(Path siteAssets, Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException {
-        String html = renderTemplate("sidebar-menu", sidebarMenuModel(projectDirectory, documents, descriptions, projectIcons));
+    private static void writeSidebarMenu(Path siteAssets, Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons, List<ProjectCategory> categories) throws IOException {
+        String html = renderTemplate("sidebar-menu", sidebarMenuModel(projectDirectory, documents, descriptions, projectIcons, categories));
         Files.writeString(siteAssets.resolve("sidebar-menu.html"), html, StandardCharsets.UTF_8);
         Files.writeString(
             siteAssets.resolve("sidebar-menu.js"),
@@ -676,7 +736,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
     }
 
-    private static Map<String, Object> siteModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException, InterruptedException {
+    private static Map<String, Object> siteModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons, List<ProjectCategory> categories) throws IOException, InterruptedException {
         String defaultProject = documents.get(0).project().slug();
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("assetPath", SITE_ASSET_PATH);
@@ -687,7 +747,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("icons", iconModel());
         List<Map<String, Object>> documentModels = documentModels(projectDirectory, documents, descriptions, projectIcons);
         model.put("documents", documentModels);
-        model.put("categories", categoryModels(documentModels));
+        model.put("categories", categoryModels(documentModels, categories));
         model.put("sidebarMenuPath", SITE_ASSET_PATH + "/sidebar-menu.html");
         model.put("sidebarMenuScriptPath", SITE_ASSET_PATH + "/sidebar-menu.js");
         return model;
@@ -832,45 +892,58 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return model;
     }
 
-    private static Map<String, Object> sidebarMenuModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons) throws IOException {
+    private static Map<String, Object> sidebarMenuModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons, List<ProjectCategory> categories) throws IOException {
         Map<String, Object> model = new LinkedHashMap<>();
-        model.put("documents", documentModels(projectDirectory, documents, descriptions, projectIcons));
+        List<Map<String, Object>> documentModels = documentModels(projectDirectory, documents, descriptions, projectIcons);
+        model.put("documents", documentModels);
+        model.put("categories", categoryModels(documentModels, categories));
         return model;
     }
 
-    private static List<Map<String, Object>> categoryModels(List<Map<String, Object>> documents) {
+    private static List<Map<String, Object>> categoryModels(List<Map<String, Object>> documents, List<ProjectCategory> categories) throws IOException {
+        Map<String, ProjectCategory> categoryByName = new LinkedHashMap<>();
         Map<String, List<Map<String, Object>>> documentsByCategory = new LinkedHashMap<>();
-        for (ProjectCategory category : PROJECT_CATEGORIES) {
+        for (ProjectCategory category : categories) {
+            categoryByName.put(category.name(), category);
             documentsByCategory.put(category.name(), new ArrayList<>());
         }
-        documentsByCategory.put("Other", new ArrayList<>());
+        ProjectCategory other = categoryByName.values()
+            .stream()
+            .filter(category -> "other".equals(category.slug()))
+            .findFirst()
+            .orElse(new ProjectCategory("other", "Other", "folder-git-2", "", Set.of()));
+        categoryByName.putIfAbsent(other.name(), other);
+        documentsByCategory.putIfAbsent(other.name(), new ArrayList<>());
 
         for (Map<String, Object> document : documents) {
             String slug = String.valueOf(document.get("slug"));
-            documentsByCategory.computeIfAbsent(projectCategory(slug), ignored -> new ArrayList<>()).add(document);
+            documentsByCategory.computeIfAbsent(projectCategory(slug, categories, other), ignored -> new ArrayList<>()).add(document);
         }
 
-        List<Map<String, Object>> categories = new ArrayList<>();
+        List<Map<String, Object>> categoryModels = new ArrayList<>();
         for (Map.Entry<String, List<Map<String, Object>>> entry : documentsByCategory.entrySet()) {
             if (entry.getValue().isEmpty()) {
                 continue;
             }
+            ProjectCategory category = categoryByName.getOrDefault(entry.getKey(), other);
             Map<String, Object> model = new LinkedHashMap<>();
-            model.put("name", entry.getKey());
-            model.put("slug", categorySlug(entry.getKey()));
+            model.put("name", category.name());
+            model.put("slug", category.slug());
+            model.put("description", category.description());
+            model.put("icon", lucideIcon(category.icon(), "category-icon-svg"));
             model.put("documents", entry.getValue());
-            categories.add(model);
+            categoryModels.add(model);
         }
-        return categories;
+        return categoryModels;
     }
 
-    private static String projectCategory(String slug) {
-        for (ProjectCategory category : PROJECT_CATEGORIES) {
+    private static String projectCategory(String slug, List<ProjectCategory> categories, ProjectCategory other) {
+        for (ProjectCategory category : categories) {
             if (category.projectSlugs().contains(slug)) {
                 return category.name();
             }
         }
-        return "Other";
+        return other.name();
     }
 
     private static String categorySlug(String name) {
@@ -1480,7 +1553,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private record ProjectDescription(String shortDescription, String longDescription) {
     }
 
-    private record ProjectCategory(String name, Set<String> projectSlugs) {
+    private record ProjectCategory(String slug, String name, String icon, String description, Set<String> projectSlugs) {
     }
 
     private record SearchItem(

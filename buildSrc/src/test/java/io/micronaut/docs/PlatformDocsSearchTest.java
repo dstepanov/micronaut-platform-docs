@@ -51,6 +51,17 @@ final class PlatformDocsSearchTest {
         String html = Files.readString(INDEX_FILE, StandardCharsets.UTF_8);
         assertTrue(html.contains("data-project=\"core\""), "The rendered search fixture must include Micronaut Core.");
         assertTrue(html.contains("data-project=\"serde\""), "The rendered search fixture must include Micronaut Serialization.");
+        assertTrue(html.contains("data-project-category=\"most-popular\""), "The rendered overview must include the Most Popular category.");
+        assertTrue(html.contains("data-project-category=\"api\""), "The rendered overview must include the API category.");
+        assertTrue(html.contains("Frequently used framework, data, security, API, messaging, and integration modules."), "The rendered overview must include docs-index category descriptions.");
+        assertFalse(html.contains("project-category-count"), "The rendered overview must not show category counts.");
+
+        Path sidebarMenu = SITE_DIRECTORY.resolve("platform-assets/sidebar-menu.html");
+        assertTrue(Files.isRegularFile(sidebarMenu), "The rendered site must include the generated sidebar menu.");
+        String sidebarHtml = Files.readString(sidebarMenu, StandardCharsets.UTF_8);
+        assertTrue(sidebarHtml.contains("data-sidebar-category=\"most-popular\""), "The sidebar must include the Most Popular category.");
+        assertTrue(sidebarHtml.contains("data-sidebar-category=\"api\""), "The sidebar must include the API category.");
+        assertFalse(sidebarHtml.contains("sidebar-category-count"), "The sidebar must not show category counts.");
 
         Path searchIndex = SITE_DIRECTORY.resolve("platform-assets/search-index.json");
         assertTrue(Files.isRegularFile(searchIndex), "The rendered search fixture must include a search index.");

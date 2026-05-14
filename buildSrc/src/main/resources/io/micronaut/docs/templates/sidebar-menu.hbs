@@ -1,3 +1,9 @@
+{{#each categories}}
+                        <section class="sidebar-category" data-sidebar-category="{{slug}}" aria-label="{{name}}">
+                            <div class="sidebar-category-heading">
+                                <span class="sidebar-category-icon" aria-hidden="true">{{{icon}}}</span>
+                                <span class="sidebar-category-title">{{name}}</span>
+                            </div>
 {{#each documents}}
                         <details class="project-section" data-project-nav="{{slug}}"{{#if selected}} open{{/if}}>
                             <summary data-project-option="{{slug}}" aria-current="{{selected}}" title="{{displayName}}">
@@ -13,4 +19,6 @@
 {{/each}}
                             </div>
                         </details>
+{{/each}}
+                        </section>
 {{/each}}
