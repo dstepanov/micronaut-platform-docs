@@ -59,7 +59,7 @@ jobs:
     timeout-minutes: 360
     needs:
       - plan
-      - test-layout
+      - test-build-logic
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
@@ -94,15 +94,14 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  test-layout:
-    name: Test six-doc layout
+  test-build-logic:
+    name: Test build logic
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: plan
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Xmx4g
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -118,10 +117,8 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Test six-doc layout
-        run: |
-          ./gradlew -q -PplatformDocs.projectSlugs=core,serde,data,mcp,oracle-cloud,sourcegen verifyPlatformDocs
-          ./gradlew :buildSrc:test
+      - name: Run fast build logic tests
+        run: ./gradlew :buildSrc:test --tests 'io.micronaut.docs.GitSupportTest' --tests 'io.micronaut.docs.VerifyPlatformDocsTaskTest'
 
   render:
     name: Render platform docs
@@ -131,6 +128,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Xmx4g
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -153,8 +151,10 @@ jobs:
           path: .
           merge-multiple: true
 
-      - name: Render and verify platform docs
-        run: ./gradlew -q verifyRenderedPlatformDocs
+      - name: Render, verify, and test platform docs
+        run: |
+          ./gradlew -q verifyRenderedPlatformDocs
+          ./gradlew :buildSrc:test
 
       - name: Upload generated site
         uses: actions/upload-artifact@v6

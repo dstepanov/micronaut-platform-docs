@@ -421,8 +421,9 @@ Search must stay fast and static:
 The workflow should keep using matrix parallelism:
 
 - The `plan` job scans the platform project set and writes the matrix.
+- The `test-build-logic` job runs only fast tests that do not require generated docs output, so it must not build the six-doc layout before the matrix.
 - The `build-guides` matrix initializes only each shard's guide submodules, verifies alignment, builds docs, and uploads staged docs artifacts.
-- The `render` job downloads artifacts, merges generated guide output, renders `build/site`, verifies it, and uploads both a debugging artifact and the GitHub Pages artifact.
+- The `render` job downloads artifacts, merges generated guide output, renders `build/site`, verifies it, runs browser-backed site tests, and uploads both a debugging artifact and the GitHub Pages artifact.
 - The deploy job should run only for `main`.
 - Use the GitHub-provided token for GitHub API calls when available. Prefer `GITHUB_TOKEN` or `GH_TOKEN`; do not require a custom token locally.
 - Avoid recursive submodule checkout in Actions because it wastes time and clones projects that no shard needs.

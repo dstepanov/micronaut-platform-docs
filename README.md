@@ -189,13 +189,16 @@ The `Platform Docs` GitHub Actions workflow lives at `.github/workflows/platform
 The workflow uses GitHub Actions matrix parallelism rather than parallel Gradle workers in one runner:
 
 - `plan` checks out the root repository without recursive submodules, initializes only `repos/micronaut-platform`, scans the platform catalog, and writes the matrix from `gradle/platform-doc-shards.properties`
+- `test-build-logic` runs the fast build logic tests that do not require generated site output
 - `build-guides` runs one job per matrix shard, checks out the root repository without recursive submodules, initializes only the selected guide submodules, verifies alignment, builds docs, renders platform guide fragments, and uploads `build/guide-docs-artifact`
-- `render` downloads and merges all shard artifacts, initializes only `repos/micronaut-platform`, reads the staged platform guide fragments, renders `build/site`, verifies the rendered page, and uploads the GitHub Pages artifact
+- `render` downloads and merges all shard artifacts, initializes only `repos/micronaut-platform`, reads the staged platform guide fragments, renders `build/site`, verifies the rendered page, runs the browser-backed tests against the rendered site, and uploads the GitHub Pages artifact
 
 ```bash
 ./gradlew -q writePlatformDocsShardMatrix
+./gradlew :buildSrc:test --tests 'io.micronaut.docs.GitSupportTest' --tests 'io.micronaut.docs.VerifyPlatformDocsTaskTest'
 ./gradlew -q -PplatformDocs.guideShardIndex=0 -PplatformDocs.guideShardCount=12 verifyPlatformAlignment stagePlatformGuideDocsArtifact
 ./gradlew -q verifyRenderedPlatformDocs
+./gradlew :buildSrc:test
 ```
 
 The workflow uploads `build/site` twice:
