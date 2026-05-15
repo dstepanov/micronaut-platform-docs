@@ -250,6 +250,10 @@ final class PlatformDocsSearchTest {
                 page.navigate(site.indexUri().toString());
                 page.locator(".sidebar-toggle").click();
                 page.waitForFunction("() => document.body.classList.contains('sidebar-open')");
+                page.locator(".sidebar-toggle").click();
+                page.waitForFunction("() => !document.body.classList.contains('sidebar-open')");
+                page.locator(".sidebar-toggle").click();
+                page.waitForFunction("() => document.body.classList.contains('sidebar-open')");
                 page.locator("[data-project-option]").first().click();
                 page.waitForFunction("() => document.body.dataset.project");
                 page.mouse().click(386, 80);
@@ -276,6 +280,7 @@ final class PlatformDocsSearchTest {
 
                 page.locator("[data-project-option='core']").click();
                 waitForLoadedProject(page, "core");
+                assertTopbarProject(page, "Micronaut Core");
                 assertNoVisibleDocumentationError(page, "core");
                 assertProjectHasHighlightedCode(page, "core");
                 assertProjectHighlightsCodeWithCallouts(page, "core");
@@ -289,13 +294,14 @@ final class PlatformDocsSearchTest {
                 page.waitForFunction("() => document.body.classList.contains('overview-active')");
                 page.locator("[data-project-card='serde']").click();
                 waitForLoadedProject(page, "serde");
+                assertTopbarProject(page, "Micronaut Serialization");
                 assertEquals("#serde", page.evaluate("() => window.location.hash"));
                 assertProjectStartsAtTop(page, "serde");
                 assertNoVisibleDocumentationError(page, "serde");
                 assertProjectHasMultiLanguageToolbarTabs(page, "serde");
                 assertPageIndexListsSection(page, "serde", "1.1 Why Micronaut Serialization?", "serde-why");
                 page.locator(".toc a[href='#serde-releaseHistory']").click();
-                page.waitForFunction("() => document.querySelector('[data-page-index]')?.hidden");
+                assertPageIndexListsSection(page, "serde", "2 Release History", "serde-releaseHistory");
                 page.locator(".toc a[href='#serde-quickStart']").click();
                 assertPageIndexListsSection(page, "serde", "3.1 Jackson Annotations & Jackson Core", "serde-jacksonQuick");
                 assertEquals("serde", page.evaluate("() => document.body.dataset.project"));
@@ -305,6 +311,7 @@ final class PlatformDocsSearchTest {
                     page.waitForFunction("() => document.body.classList.contains('overview-active')");
                     page.locator("[data-project-card='" + project + "']").click();
                     waitForLoadedProject(page, project);
+                    assertTopbarProject(page, TEST_PROJECTS.get(project));
                     assertEquals("#" + project, page.evaluate("() => window.location.hash"));
                     assertProjectStartsAtTop(page, project);
                     assertNoVisibleDocumentationError(page, project);
@@ -589,6 +596,16 @@ final class PlatformDocsSearchTest {
                 "return articleTop >= minimumTop && articleTop <= preferredTop + 10;" +
                 "}",
             project
+        );
+    }
+
+    private static void assertTopbarProject(Page page, String expectedProject) {
+        page.waitForFunction(
+            "expectedProject => {" +
+                "const project = document.querySelector('[data-topbar-project]');" +
+                "return project && !project.hidden && project.innerText.trim() === expectedProject;" +
+                "}",
+            expectedProject
         );
     }
 

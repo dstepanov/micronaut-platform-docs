@@ -16,7 +16,6 @@ const overviewPage = document.querySelector("[data-overview]");
 const sidebarCollapse = document.querySelector(".sidebar-collapse");
 const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-label]");
 const sidebarToggle = document.querySelector(".sidebar-toggle");
-const sidebarContent = document.querySelector(".sidebar-content");
 const sidebarMenu = document.querySelector("[data-sidebar-menu]");
 const themeSwitcher = document.querySelector("[data-theme-switcher]");
 const searchRoot = document.querySelector("[data-search]");
@@ -38,6 +37,8 @@ const referenceSwitcher = document.querySelector("[data-reference-switcher]");
 const pageIndex = document.querySelector("[data-page-index]");
 const pageIndexNav = document.querySelector("[data-page-index-nav]");
 const pageIndexTop = document.querySelector("[data-page-index-top]");
+const topbarProject = document.querySelector("[data-topbar-project]");
+const topbarProjectSeparator = document.querySelector("[data-topbar-project-separator]");
 const projectCards = Array.from(document.querySelectorAll("[data-project-card]"));
 const projectArticles = new Map(Array.from(document.querySelectorAll("article.guide-document[data-project]")).map((article) => [article.dataset.project, article]));
 const projectDocumentPromises = new Map();
@@ -1548,13 +1549,17 @@ function pageIndexHeadingItems(project, activeId) {
     if (!root) {
         return [];
     }
-    return projectPageIndexItems(project)
-        .filter((item) => item.level > 0 && item.number.startsWith(root.number + "."))
-        .map((item) => ({
-            id: item.id,
-            level: Math.min(Math.max(item.level, 1), 3),
-            label: item.label
-        }));
+    const items = projectPageIndexItems(project);
+    const childItems = items
+        .filter((item) => item.level > 0 && item.number.startsWith(root.number + "."));
+    const visibleItems = childItems.length
+        ? childItems
+        : items.filter((item) => item.level === 0);
+    return visibleItems.map((item) => ({
+        id: item.id,
+        level: Math.min(Math.max(item.level, 1), 3),
+        label: item.label
+    }));
 }
 
 function clearPageIndexActiveLink() {
@@ -1687,20 +1692,6 @@ function queueScrollSpy() {
     });
 }
 
-function scrollProjectSubmenu(section) {
-    const projectOption = section?.querySelector("[data-project-option]");
-    if (!sidebarContent || !projectOption) {
-        return;
-    }
-    window.requestAnimationFrame(() => {
-        const top = projectOption.getBoundingClientRect().top - sidebarContent.getBoundingClientRect().top + sidebarContent.scrollTop - 8;
-        sidebarContent.scrollTo({
-            top: Math.max(0, top),
-            behavior: "auto"
-        });
-    });
-}
-
 function focusSearchTarget(target) {
     if (focusedSearchTarget && focusedSearchTarget !== target) {
         focusedSearchTarget.classList.remove("platform-search-target");
@@ -1783,8 +1774,7 @@ function openProjectCard(card) {
         updateHash: true,
         forceHash: true,
         scrollContent: true,
-        scrollProjectTitle: true,
-        scrollSubmenu: targetProject !== document.body.dataset.project
+        scrollProjectTitle: true
     });
     closeSidebar();
 }
@@ -2009,6 +1999,17 @@ function closeSidebar() {
     sidebarToggle?.setAttribute("aria-expanded", "false");
 }
 
+function updateTopbarProject(project) {
+    const title = project ? projectTitleForSearch(project) : "";
+    if (topbarProject) {
+        topbarProject.textContent = title;
+        topbarProject.hidden = !title;
+    }
+    if (topbarProjectSeparator) {
+        topbarProjectSeparator.hidden = !title;
+    }
+}
+
 function clickIsOutsideOpenSidebar(event) {
     return document.body.classList.contains("sidebar-open")
         && window.matchMedia("(max-width: 1100px)").matches
@@ -2038,6 +2039,7 @@ function setOverview(options) {
         previous.summary.setAttribute("aria-current", "false");
     }
     document.body.dataset.project = "";
+    updateTopbarProject("");
     document.body.classList.add("overview-active");
     if (overviewPage) {
         overviewPage.hidden = false;
@@ -2071,6 +2073,7 @@ function setProject(project, options) {
     const previousArticle = previous?.article || projectArticles.get(previousProject);
     const nextArticle = next?.article || projectArticles.get(project);
     document.body.dataset.project = project;
+    updateTopbarProject(project);
     document.body.classList.remove("overview-active");
     if (overviewPage) {
         overviewPage.hidden = true;
@@ -2104,9 +2107,6 @@ function setProject(project, options) {
     }
     renderPageIndex(project, activeTargetSection);
     refreshActiveLink(settings.scrollContent ? activeTargetSection : undefined);
-    if (settings.scrollSubmenu && project !== previousProject) {
-        scrollProjectSubmenu(next?.section);
-    }
     if (project !== previousProject) {
         updateReferenceProject(project);
     }
@@ -2189,8 +2189,7 @@ function bindProjectOptions() {
                 updateHash: true,
                 forceHash: true,
                 scrollContent: true,
-                scrollProjectTitle: true,
-                scrollSubmenu: true
+                scrollProjectTitle: true
             });
         });
     });
@@ -2260,8 +2259,7 @@ document.addEventListener("click", (event) => {
                 scrollContent: true,
                 scrollProjectTitle: true,
                 scrollBlock: "center",
-                focusTarget: true,
-                scrollSubmenu: project !== document.body.dataset.project
+                focusTarget: true
             });
             const article = projectSections.get(project)?.article || projectArticles.get(project);
             const referenceButton = article?.querySelector("[data-reference-open][data-reference-kind='" + CSS.escape(searchResult.dataset.searchReferenceKind || "configuration") + "']");
@@ -2335,8 +2333,7 @@ document.addEventListener("click", (event) => {
             scrollContent: true,
             scrollBlock: fromSearch && !projectRootTarget ? "center" : "start",
             focusTarget: fromSearch && !projectRootTarget,
-            scrollProjectTitle: projectRootTarget || Boolean(hashLink.closest("[data-overview-doc-link], [data-search-project-link]")),
-            scrollSubmenu: targetProject !== document.body.dataset.project
+            scrollProjectTitle: projectRootTarget || Boolean(hashLink.closest("[data-overview-doc-link], [data-search-project-link]"))
         });
         closeSidebar();
         window.setTimeout(queueScrollSpy, 0);
