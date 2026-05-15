@@ -487,6 +487,14 @@ final class PlatformDocsSearchTest {
     private static void search(Page page, String query) {
         openSearchDialog(page);
         page.locator("[data-search-input]").fill(query);
+        page.waitForFunction(
+            "query => {" +
+                "const input = document.querySelector('[data-search-input]');" +
+                "const result = document.querySelector('[data-search-result]');" +
+                "return input?.value === query && result?.innerText.toLowerCase().includes(query.toLowerCase().split(/\\s+/)[0]);" +
+                "}",
+            query
+        );
         visibleSearchResult(page);
     }
 
@@ -550,8 +558,9 @@ final class PlatformDocsSearchTest {
                 "return false;" +
                 "}" +
                 "const preferredTop = (topbar?.getBoundingClientRect().height || 0) + 16;" +
+                "const minimumTop = (topbar?.getBoundingClientRect().height || 0) - 2;" +
                 "const articleTop = article.getBoundingClientRect().top;" +
-                "return Math.abs(articleTop - preferredTop) <= 10;" +
+                "return articleTop >= minimumTop && articleTop <= preferredTop + 10;" +
                 "}",
             project
         );

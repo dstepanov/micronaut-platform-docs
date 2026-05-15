@@ -63,7 +63,7 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
                 "Missing lazy document URL for " + project.slug()
             );
             require(html.contains("data-project-card=\"" + project.slug() + "\""), "Missing overview card for " + project.slug());
-            require(html.contains("href=\"#" + project.slug() + "-"), "Missing overview docs link for " + project.slug());
+            require(html.contains("href=\"#" + project.slug() + "\""), "Missing overview docs link for " + project.slug());
             require(sidebarMenuHtml.contains("data-project-nav=\"" + project.slug() + "\""), "Missing sidebar for " + project.slug());
             require(sidebarMenuHtml.contains("data-project-option=\"" + project.slug() + "\""), "Missing sidebar project option for " + project.slug());
             require(sidebarMenuHtml.contains("project-icon"), "Missing sidebar project icons.");
