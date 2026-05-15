@@ -10,6 +10,7 @@ const searchIndexUrl = "{{{searchIndexUrl}}}";
 const searchIndexScriptUrl = "{{{searchIndexScriptUrl}}}";
 const sidebarMenuUrl = "{{{sidebarMenuUrl}}}";
 const sidebarMenuScriptUrl = "{{{sidebarMenuScriptUrl}}}";
+const codeLanguageIcons = {{{codeLanguageIcons}}};
 const overviewPage = document.querySelector("[data-overview]");
 const sidebarCollapse = document.querySelector(".sidebar-collapse");
 const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-label]");
@@ -26,6 +27,8 @@ const searchRoot = document.querySelector("[data-search]");
 const searchInput = document.querySelector("[data-search-input]");
 const searchClear = document.querySelector("[data-search-clear]");
 const searchResults = document.querySelector("[data-search-results]");
+const searchDialog = document.querySelector("[data-search-dialog]");
+const searchScopeButtons = Array.from(document.querySelectorAll("[data-search-scope]"));
 const referenceOverlay = document.querySelector("[data-reference-overlay]");
 const referencePanel = document.querySelector("[data-reference-panel]");
 const referenceFrame = document.querySelector("[data-reference-frame]");
@@ -33,6 +36,7 @@ const referenceTitle = document.querySelector("[data-reference-title]");
 const referenceProject = document.querySelector("[data-reference-project-label]");
 const referenceOpenNew = document.querySelector("[data-reference-open-new]");
 const referenceExpand = document.querySelector("[data-reference-expand]");
+const referenceSwitcher = document.querySelector("[data-reference-switcher]");
 const projectCards = Array.from(document.querySelectorAll("[data-project-card]"));
 const projectArticles = new Map(Array.from(document.querySelectorAll("article.guide-document[data-project]")).map((article) => [article.dataset.project, article]));
 const projectDocumentPromises = new Map();
@@ -49,7 +53,10 @@ let contentScrollFrame = 0;
 let searchIndexPromise;
 let searchFrame = 0;
 let searchActiveIndex = -1;
+let searchScope = "all";
 let themeManuallySelected = false;
+let multiLanguageSelectorId = 0;
+let activeReferenceProject = "";
 
 function copyText(element) {
     let range;
@@ -76,6 +83,471 @@ window.copyToClipboard = function copyToClipboard(element) {
         copyText(source);
     }
 };
+
+function modernCodeCopyIcon() {
+    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" focusable=\"false\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg><span class=\"visually-hidden\">Copy code</span>";
+}
+
+function hasCodeLanguage(code) {
+    if (code?.dataset?.lang) {
+        return true;
+    }
+    return Array.from(code?.classList || []).some((className) => className.startsWith("language-"));
+}
+
+function codeLanguageKey(language) {
+    const value = String(language || "").trim().toLowerCase();
+    if (value === "gradle-groovy" || value === "gradle-kotlin") {
+        return "gradle";
+    }
+    if (value === "pom") {
+        return "maven";
+    }
+    if (value === "groovy-config") {
+        return "groovy";
+    }
+    if (value === "json-config") {
+        return "json";
+    }
+    if (value === "yml") {
+        return "yaml";
+    }
+    if (value === "conf") {
+        return "hocon";
+    }
+    if (["props", "property"].includes(value)) {
+        return "properties";
+    }
+    if (["bash", "console", "sh", "shell", "zsh"].includes(value)) {
+        return "shell";
+    }
+    if (["plaintext", "txt"].includes(value)) {
+        return "text";
+    }
+    if (value === "js") {
+        return "javascript";
+    }
+    if (value === "ts") {
+        return "typescript";
+    }
+    return value;
+}
+
+function isDependencySnippet(code) {
+    const language = codeLanguageKey(languageFromCodeElement(code));
+    if (["gradle", "maven"].includes(language)) {
+        return true;
+    }
+    const text = code?.textContent || "";
+    if (["xml", "text"].includes(language) && /<(dependency|dependencyManagement|annotationProcessorPaths)\b|<\/dependency>|<(groupId|artifactId)>/.test(text)) {
+        return true;
+    }
+    if (["groovy", "kotlin", "java", "text"].includes(language) && /\b(api|implementation|compileOnly|runtimeOnly|annotationProcessor|testImplementation|ksp|kapt)\s*\(/.test(text)) {
+        return true;
+    }
+    return false;
+}
+
+function codeLanguageLabel(language) {
+    const value = String(language || "").trim().toLowerCase();
+    const labels = {
+        "bash": "Shell",
+        "conf": "Config",
+        "console": "Shell",
+        "gradle": "Gradle",
+        "gradle-groovy": "Gradle (Groovy)",
+        "gradle-kotlin": "Gradle (Kotlin)",
+        "graphql": "GraphQL",
+        "groovy": "Groovy",
+        "groovy-config": "Groovy",
+        "hocon": "HOCON",
+        "html": "HTML",
+        "java": "Java",
+        "javascript": "JavaScript",
+        "js": "JavaScript",
+        "json": "JSON",
+        "json-config": "JSON",
+        "kotlin": "Kotlin",
+        "maven": "Maven",
+        "plaintext": "Text",
+        "pom": "Maven",
+        "protobuf": "Protocol Buffers",
+        "properties": "Properties",
+        "python": "Python",
+        "sh": "Shell",
+        "shell": "Shell",
+        "sql": "SQL",
+        "text": "Text",
+        "ts": "TypeScript",
+        "toml": "TOML",
+        "typescript": "TypeScript",
+        "xml": "XML",
+        "yaml": "YAML",
+        "yml": "YAML",
+        "zsh": "Shell"
+    };
+    if (labels[value]) {
+        return labels[value];
+    }
+    return String(language || "")
+        .split("-")
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
+function codeLanguageIcon(language) {
+    const key = codeLanguageKey(language);
+    const generatedIcon = codeLanguageIcons[key];
+    if (generatedIcon) {
+        const svgAttributes = generatedIcon.fill
+            ? "fill=\"currentColor\""
+            : "fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"";
+        const fillClass = generatedIcon.fill ? " docs-code-language-icon-fill" : "";
+        return "<span class=\"docs-code-language-icon docs-code-language-icon-" + key + fillClass + "\" aria-hidden=\"true\"><svg viewBox=\"" + generatedIcon.viewBox + "\" " + svgAttributes + " focusable=\"false\">" + generatedIcon.body + "</svg></span>";
+    }
+    const icons = {
+        gradle: {
+            fill: true,
+            path: "<path d=\"M22.695 4.297a3.807 3.807 0 0 0-5.29-.09.368.368 0 0 0 0 .533l.46.47a.363.363 0 0 0 .474.032 2.182 2.182 0 0 1 2.86 3.291c-3.023 3.02-7.056-5.447-16.211-1.083a1.24 1.24 0 0 0-.534 1.745l1.571 2.713a1.238 1.238 0 0 0 1.681.461l.037-.02-.029.02.688-.384a16.083 16.083 0 0 0 2.193-1.635.384.384 0 0 1 .499-.016.357.357 0 0 1 .016.534 16.435 16.435 0 0 1-2.316 1.741H8.77l-.696.39a1.958 1.958 0 0 1-.963.25 1.987 1.987 0 0 1-1.726-.989L3.9 9.696C1.06 11.72-.686 15.603.26 20.522a.363.363 0 0 0 .354.296h1.675a.363.363 0 0 0 .37-.331 2.478 2.478 0 0 1 4.915 0 .36.36 0 0 0 .357.317h1.638a.363.363 0 0 0 .357-.317 2.478 2.478 0 0 1 4.914 0 .363.363 0 0 0 .358.317h1.627a.363.363 0 0 0 .363-.357c.037-2.294.656-4.93 2.42-6.25 6.108-4.57 4.502-8.486 3.088-9.9zm-6.229 6.901l-1.165-.584a.73.73 0 1 1 1.165.587z\"></path>"
+        },
+        graphql: {
+            fill: true,
+            path: "<path d=\"M12.002 0a2.138 2.138 0 1 0 0 4.277 2.138 2.138 0 1 0 0-4.277zm8.54 4.931a2.138 2.138 0 1 0 0 4.277 2.138 2.138 0 1 0 0-4.277zm0 9.862a2.138 2.138 0 1 0 0 4.277 2.138 2.138 0 1 0 0-4.277zm-8.54 4.931a2.138 2.138 0 1 0 0 4.276 2.138 2.138 0 1 0 0-4.276zm-8.542-4.93a2.138 2.138 0 1 0 0 4.276 2.138 2.138 0 1 0 0-4.277zm0-9.863a2.138 2.138 0 1 0 0 4.277 2.138 2.138 0 1 0 0-4.277zm8.542-3.378L2.953 6.777v10.448l9.049 5.224 9.047-5.224V6.777zm0 1.601 7.66 13.27H4.34zm-1.387.371L3.97 15.037V7.363zm2.774 0 6.646 3.838v7.674zM5.355 17.44h13.293l-6.646 3.836z\"></path>"
+        },
+        groovy: {
+            path: "<path d=\"M15.5 8.5a5 5 0 1 0 .1 7\"></path><path d=\"M16 8.5v7.8a3.7 3.7 0 0 1-6.9 1.8\"></path><path d=\"M9 12h7\"></path>"
+        },
+        hocon: {
+            path: "<path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z\"></path><path d=\"M14 2v6h6\"></path><path d=\"M8 13h8\"></path><path d=\"M8 17h5\"></path>"
+        },
+        html: {
+            path: "<path d=\"m10 13-2-2 2-2\"></path><path d=\"m14 9 2 2-2 2\"></path><path d=\"M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z\"></path>"
+        },
+        java: {
+            path: "<path d=\"M10 2c1.2 1.2 1.2 2.4 0 3.6\"></path><path d=\"M14 2c1.2 1.2 1.2 2.4 0 3.6\"></path><path d=\"M5 9h11v7a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4Z\"></path><path d=\"M16 10h2.2a2.8 2.8 0 0 1 0 5.6H16\"></path><path d=\"M7 22h8\"></path>"
+        },
+        javascript: {
+            path: "<path d=\"M4 4h16v16H4Z\"></path><path d=\"M9 8v6.5a1.5 1.5 0 0 1-3 0\"></path><path d=\"M17 9.5a2 2 0 0 0-2-1.5c-1.1 0-2 .7-2 1.7 0 2.3 4 1.3 4 4 0 1-.9 1.8-2.2 1.8-1 0-1.8-.4-2.3-1.2\"></path>"
+        },
+        json: {
+            path: "<path d=\"M8 7H6a2 2 0 0 0-2 2v1a2 2 0 0 1-2 2 2 2 0 0 1 2 2v1a2 2 0 0 0 2 2h2\"></path><path d=\"M16 7h2a2 2 0 0 1 2 2v1a2 2 0 0 0 2 2 2 2 0 0 0-2 2v1a2 2 0 0 1-2 2h-2\"></path>"
+        },
+        kotlin: {
+            fill: true,
+            path: "<path d=\"M24 24H0V0h24L12 12Z\"></path>"
+        },
+        maven: {
+            path: "<path d=\"M4 19V5h4l4 7 4-7h4v14\"></path><path d=\"M8 19V10l4 6 4-6v9\"></path>"
+        },
+        properties: {
+            path: "<path d=\"M4 7h7\"></path><path d=\"M15 7h5\"></path><path d=\"M4 12h4\"></path><path d=\"M12 12h8\"></path><path d=\"M4 17h10\"></path><path d=\"M18 17h2\"></path><circle cx=\"13\" cy=\"7\" r=\"2\"></circle><circle cx=\"10\" cy=\"12\" r=\"2\"></circle><circle cx=\"16\" cy=\"17\" r=\"2\"></circle>"
+        },
+        protobuf: {
+            path: "<path d=\"M7 3h7l4 4v14H7Z\"></path><path d=\"M14 3v5h4\"></path><path d=\"M10 12h4\"></path><path d=\"M10 16h4\"></path>"
+        },
+        python: {
+            path: "<path d=\"M12 3H8.5A3.5 3.5 0 0 0 5 6.5V11h7\"></path><path d=\"M12 21h3.5a3.5 3.5 0 0 0 3.5-3.5V13h-7\"></path><path d=\"M12 3h3.5A3.5 3.5 0 0 1 19 6.5V9\"></path><path d=\"M12 21H8.5A3.5 3.5 0 0 1 5 17.5V15\"></path><path d=\"M9 7h.01\"></path><path d=\"M15 17h.01\"></path>"
+        },
+        shell: {
+            path: "<path d=\"M4 17h16\"></path><path d=\"m4 7 5 5-5 5\"></path><path d=\"M12 19h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2\"></path>"
+        },
+        sql: {
+            path: "<ellipse cx=\"12\" cy=\"5\" rx=\"7\" ry=\"3\"></ellipse><path d=\"M5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5\"></path><path d=\"M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3\"></path>"
+        },
+        text: {
+            path: "<path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z\"></path><path d=\"M14 2v6h6\"></path><path d=\"M8 13h8\"></path><path d=\"M8 17h5\"></path>"
+        },
+        toml: {
+            fill: true,
+            path: "<path d=\"M.014 0h5.34v2.652H2.888v18.681h2.468V24H.015V0Zm17.622 5.049v2.78h-4.274v12.935h-3.008V7.83H6.059V5.05h11.577ZM23.986 24h-5.34v-2.652h2.467V2.667h-2.468V0h5.34v24Z\"></path>"
+        },
+        typescript: {
+            path: "<path d=\"M4 4h16v16H4Z\"></path><path d=\"M8 8h6\"></path><path d=\"M11 8v8\"></path><path d=\"M18 9.5a2 2 0 0 0-2-1.5c-1.1 0-2 .7-2 1.7 0 2.3 4 1.3 4 4 0 1-.9 1.8-2.2 1.8-1 0-1.8-.4-2.3-1.2\"></path>"
+        },
+        xml: {
+            path: "<path d=\"m8 16-4-4 4-4\"></path><path d=\"m16 8 4 4-4 4\"></path><path d=\"m14 4-4 16\"></path>"
+        },
+        yaml: {
+            path: "<path d=\"M5 4v16\"></path><path d=\"M5 7h6\"></path><path d=\"M7 12h8\"></path><path d=\"M9 17h10\"></path><circle cx=\"5\" cy=\"7\" r=\"1\"></circle><circle cx=\"7\" cy=\"12\" r=\"1\"></circle><circle cx=\"9\" cy=\"17\" r=\"1\"></circle>"
+        }
+    };
+    const icon = icons[key];
+    if (!icon) {
+        return "";
+    }
+    const svgAttributes = icon.fill
+        ? "fill=\"currentColor\""
+        : "fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"";
+    const fillClass = icon.fill ? " docs-code-language-icon-fill" : "";
+    return "<span class=\"docs-code-language-icon docs-code-language-icon-" + key + fillClass + "\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" " + svgAttributes + " focusable=\"false\">" + icon.path + "</svg></span>";
+}
+
+function codeLanguageTabHtml(language, label) {
+    return codeLanguageIcon(language) + "<span class=\"docs-code-language-text\">" + escapeHtml(label) + "</span>";
+}
+
+function upgradeCodeBlocks(root) {
+    root.querySelectorAll(".listingblock:not([data-code-block])").forEach((block) => {
+        const code = block.querySelector("pre code");
+        const content = block.querySelector(".content");
+        if (!code || !content) {
+            return;
+        }
+        const title = block.querySelector(":scope > .title");
+        const multiLanguageSample = block.classList.contains("multi-language-sample");
+        block.classList.add("docs-code-block");
+        block.dataset.codeBlock = "";
+        if (title?.textContent?.trim()) {
+            const titleElement = document.createElement("div");
+            titleElement.className = "docs-code-title";
+            titleElement.innerHTML = title.innerHTML.trim();
+            if (multiLanguageSample) {
+                block.insertBefore(titleElement, content);
+            } else {
+                block.parentNode?.insertBefore(titleElement, block);
+            }
+            title.remove();
+        }
+        if (!hasCodeLanguage(code)) {
+            code.classList.add("language-plaintext");
+            code.dataset.lang = "text";
+        }
+        if (isDependencySnippet(code)) {
+            block.classList.add("docs-code-dependency-snippet");
+        }
+        const copy = document.createElement("button");
+        copy.className = "docs-code-copy";
+        copy.type = "button";
+        copy.dataset.copyCode = "";
+        copy.title = "Copy code";
+        copy.setAttribute("aria-label", "Copy code");
+        copy.innerHTML = modernCodeCopyIcon();
+        block.insertBefore(copy, content);
+        content.classList.add("docs-code-content");
+    });
+}
+
+function copyModernCodeBlock(button) {
+    const block = button.closest("[data-code-block]");
+    const code = block?.querySelector("pre code");
+    if (!code) {
+        return;
+    }
+    const value = code.textContent || "";
+    const copied = () => {
+        button.classList.add("copied");
+        button.setAttribute("aria-label", "Copied");
+        button.title = "Copied";
+        window.setTimeout(() => {
+            button.classList.remove("copied");
+            button.setAttribute("aria-label", "Copy code");
+            button.title = "Copy code";
+        }, 1200);
+    };
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(value).then(copied).catch(() => {
+            copyText(code);
+            copied();
+        });
+    } else {
+        copyText(code);
+        copied();
+    }
+}
+
+function multiLanguageSamplesForSelector(selector) {
+    const samples = [];
+    let sample = selector.nextElementSibling;
+    while (sample?.classList?.contains("multi-language-sample")) {
+        samples.push(sample);
+        sample = sample.nextElementSibling;
+    }
+    return samples;
+}
+
+function languageFromCodeElement(code) {
+    if (!code) {
+        return "";
+    }
+    if (code.dataset?.lang) {
+        return code.dataset.lang;
+    }
+    const languageClass = Array.from(code.classList || [])
+        .find((className) => className.startsWith("language-"));
+    return languageClass ? languageClass.substring("language-".length) : "";
+}
+
+function languageForSample(sample) {
+    const language = sample.getAttribute("data-lang") || languageFromCodeElement(sample.querySelector("pre code"));
+    if (language) {
+        sample.setAttribute("data-lang", language);
+    }
+    return language;
+}
+
+function multiLanguageSampleGroups(root) {
+    const groups = [];
+    root.querySelectorAll(".multi-language-sample").forEach((sample) => {
+        if (sample.previousElementSibling?.classList?.contains("multi-language-sample")) {
+            return;
+        }
+        const group = [sample];
+        let next = sample.nextElementSibling;
+        while (next?.classList?.contains("multi-language-sample")) {
+            group.push(next);
+            next = next.nextElementSibling;
+        }
+        if (group.length > 1) {
+            groups.push(group);
+        }
+    });
+    return groups;
+}
+
+function ensureMultiLanguageSelectors(root) {
+    multiLanguageSampleGroups(root).forEach((samples) => {
+        let selector = samples[0].previousElementSibling;
+        if (!selector?.classList?.contains("multi-language-selector")) {
+            selector = document.createElement("div");
+            selector.className = "multi-language-selector";
+            samples[0].parentNode?.insertBefore(selector, samples[0]);
+        }
+        if (!selector.dataset.docsTabsId) {
+            selector.dataset.docsTabsId = "multi-language-tabs-" + (++multiLanguageSelectorId);
+        }
+        const languages = [];
+        samples.forEach((sample) => {
+            const language = languageForSample(sample);
+            if (language && !languages.includes(language)) {
+                languages.push(language);
+            }
+        });
+        selector.replaceChildren(...languages.map((language) => {
+            const option = document.createElement("button");
+            option.className = "language-option";
+            option.type = "button";
+            option.dataset.lang = language;
+            option.setAttribute("data-lang", language);
+            option.setAttribute("role", "button");
+            option.textContent = codeLanguageLabel(language);
+            option.addEventListener("click", () => {
+                setMultiLanguageSelectorLanguage(selector, language);
+            });
+            return option;
+        }));
+        const selectedLanguage = selector.querySelector(".language-option.selected")?.getAttribute("data-lang")
+            || samples.find((sample) => !sample.classList.contains("hidden"))?.getAttribute("data-lang")
+            || languages[0];
+        setMultiLanguageSelectorLanguage(selector, selectedLanguage);
+    });
+}
+
+function syncMultiLanguageTabs(root) {
+    root.querySelectorAll(".docs-code-tabs-multi[data-source-selector]").forEach((tabs) => {
+        const selector = document.querySelector("[data-docs-tabs-id=\"" + tabs.dataset.sourceSelector + "\"]");
+        if (!selector) {
+            return;
+        }
+        tabs.querySelectorAll("[data-lang]").forEach((tab) => {
+            const source = Array.from(selector.querySelectorAll(".language-option"))
+                .find((option) => option.getAttribute("data-lang") === tab.getAttribute("data-lang"));
+            tab.classList.toggle("selected", Boolean(source?.classList.contains("selected")));
+            tab.setAttribute("aria-selected", String(Boolean(source?.classList.contains("selected"))));
+        });
+    });
+}
+
+function setMultiLanguageSelectorLanguage(selector, language) {
+    const samples = multiLanguageSamplesForSelector(selector);
+    if (!samples.length) {
+        return;
+    }
+    let selectedLanguage = language;
+    let visibleSample = samples.find((sample) => sample.getAttribute("data-lang") === selectedLanguage);
+    if (!visibleSample) {
+        visibleSample = samples[0];
+        selectedLanguage = visibleSample.getAttribute("data-lang");
+    }
+    selector.querySelectorAll(".language-option").forEach((option) => {
+        option.classList.toggle("selected", option.getAttribute("data-lang") === selectedLanguage);
+    });
+    samples.forEach((sample) => {
+        sample.classList.toggle("hidden", sample !== visibleSample);
+    });
+    syncMultiLanguageTabs(selector.parentElement || document);
+}
+
+function integrateMultiLanguageTabs(root) {
+    root.querySelectorAll(".multi-language-selector").forEach((selector) => {
+        const samples = multiLanguageSamplesForSelector(selector);
+        if (samples.length < 2) {
+            return;
+        }
+        const titleHtml = samples.map((sample) => sample.querySelector(":scope > .docs-code-title"))
+            .find((title) => title?.textContent?.trim())
+            ?.innerHTML
+            ?.trim();
+        samples.forEach((sample) => {
+            sample.querySelector(":scope > .docs-code-title")?.remove();
+        });
+        if (titleHtml) {
+            let titleElement = selector.previousElementSibling;
+            if (!titleElement?.classList?.contains("docs-code-title")) {
+                titleElement = document.createElement("div");
+                titleElement.className = "docs-code-title";
+                selector.parentNode?.insertBefore(titleElement, selector);
+            }
+            titleElement.innerHTML = titleHtml;
+        }
+        if (!selector.dataset.docsTabsId) {
+            selector.dataset.docsTabsId = "multi-language-tabs-" + (++multiLanguageSelectorId);
+        }
+        selector.hidden = true;
+        selector.setAttribute("aria-hidden", "true");
+        const options = Array.from(selector.querySelectorAll(".language-option"))
+            .map((option) => ({
+                language: option.getAttribute("data-lang"),
+                label: option.textContent.trim()
+            }))
+            .filter((option) => option.language && option.label);
+        samples.forEach((sample) => {
+            let toolbar = sample.querySelector(":scope > .docs-code-toolbar");
+            if (!toolbar) {
+                toolbar = document.createElement("div");
+                toolbar.className = "docs-code-toolbar";
+                const copy = sample.querySelector(":scope > .docs-code-copy");
+                const content = sample.querySelector(":scope > .docs-code-content");
+                sample.insertBefore(toolbar, content);
+                if (copy) {
+                    toolbar.appendChild(copy);
+                }
+            }
+            let tabs = toolbar.querySelector(":scope > .docs-code-tabs");
+            if (!tabs) {
+                tabs = document.createElement("div");
+                tabs.className = "docs-code-tabs";
+                toolbar.insertBefore(tabs, toolbar.firstChild);
+            }
+            tabs.classList.add("docs-code-tabs-multi");
+            tabs.dataset.sourceSelector = selector.dataset.docsTabsId;
+            tabs.setAttribute("role", "tablist");
+            tabs.replaceChildren(...options.map((option) => {
+                const tab = document.createElement("button");
+                tab.className = "docs-code-language language-option";
+                tab.type = "button";
+                tab.dataset.lang = option.language;
+                tab.setAttribute("role", "tab");
+                tab.innerHTML = codeLanguageTabHtml(option.language, option.label);
+                tab.addEventListener("click", () => {
+                    setMultiLanguageSelectorLanguage(selector, option.language);
+                });
+                return tab;
+            }));
+        });
+    });
+    syncMultiLanguageTabs(root);
+}
 
 function escapeHtml(value) {
     return String(value)
@@ -119,6 +591,212 @@ function projectFilterTokens(value) {
 
 function projectFilterText(project, data) {
     return normalizeSearchText(project + " " + (data.summary?.textContent || ""));
+}
+
+function searchCommandIcon(kind) {
+    const normalizedKind = String(kind || "").toLowerCase();
+    const icons = {
+        api: "<path d=\"m8 3-4 4 4 4\"></path><path d=\"m16 3 4 4-4 4\"></path><path d=\"m14 21 4-10\"></path><path d=\"m6 21 4-10\"></path>",
+        configuration: "<path d=\"M4 21v-7\"></path><path d=\"M4 10V3\"></path><path d=\"M12 21v-9\"></path><path d=\"M12 8V3\"></path><path d=\"M20 21v-5\"></path><path d=\"M20 12V3\"></path><path d=\"M2 14h4\"></path><path d=\"M10 8h4\"></path><path d=\"M18 16h4\"></path>",
+        "configuration-reference": "<path d=\"M4 21v-7\"></path><path d=\"M4 10V3\"></path><path d=\"M12 21v-9\"></path><path d=\"M12 8V3\"></path><path d=\"M20 21v-5\"></path><path d=\"M20 12V3\"></path><path d=\"M2 14h4\"></path><path d=\"M10 8h4\"></path><path d=\"M18 16h4\"></path>",
+        content: "<path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"></path><path d=\"M14 2v6h6\"></path><path d=\"M16 13H8\"></path><path d=\"M16 17H8\"></path><path d=\"M10 9H8\"></path>",
+        project: "<path d=\"M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2\"></path><path d=\"M3 7h18v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z\"></path>",
+        repository: "<path d=\"M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.1-1.3-.3-2.6-1.1-3.6.1-.4.5-1.8-.1-3.4 0 0-1-.3-3.5 1.3a12.3 12.3 0 0 0-6.3 0C6.5 1.7 5.5 2 5.5 2c-.6 1.6-.2 3-.1 3.4A5.2 5.2 0 0 0 4.3 9c0 3.5 3 5.5 6 5.5a4.8 4.8 0 0 0-1 3.5v4\"></path><path d=\"M9 18c-4.5 2-5-2-7-2\"></path>",
+        section: "<path d=\"M4 19.5A2.5 2.5 0 0 1 6.5 17H20\"></path><path d=\"M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\"></path>"
+    };
+    const path = icons[normalizedKind] || icons.section;
+    return "<span class=\"site-search-result-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" + path + "</svg></span>";
+}
+
+function searchKindLabel(item) {
+    if (item.kind === "project") {
+        return "Project";
+    }
+    if (item.kind === "configuration") {
+        return "Configuration property";
+    }
+    if (item.kind === "configuration-reference") {
+        return "Configuration reference";
+    }
+    if (item.kind === "api") {
+        return "API / Javadoc";
+    }
+    if (item.kind === "repository") {
+        return "Repository";
+    }
+    if (item.kind === "content") {
+        return "Documentation match";
+    }
+    return "Documentation section";
+}
+
+function searchResultDetail(item) {
+    if (item.kind === "project") {
+        return "Project documentation";
+    }
+    if (item.kind === "configuration") {
+        return "Configuration property";
+    }
+    if (item.kind === "configuration-reference") {
+        return "Open configuration reference";
+    }
+    if (item.kind === "api") {
+        return "Open API and Javadoc reference";
+    }
+    if (item.kind === "repository") {
+        return "Open GitHub repository";
+    }
+    if (item.kind === "content") {
+        return "Documentation match";
+    }
+    return "Documentation section";
+}
+
+function searchScopeMatchesItem(item) {
+    if (searchScope === "projects") {
+        return item.kind === "project";
+    }
+    if (searchScope === "docs") {
+        return item.kind === "section" || item.kind === "content";
+    }
+    if (searchScope === "config") {
+        return item.kind === "configuration" || item.kind === "configuration-reference";
+    }
+    if (searchScope === "api") {
+        return item.kind === "api";
+    }
+    if (searchScope === "repositories") {
+        return item.kind === "repository";
+    }
+    return true;
+}
+
+function setSearchOpen(open) {
+    if (searchDialog) {
+        searchDialog.hidden = !open;
+    }
+    document.body.classList.toggle("search-open", open);
+    if (searchRoot) {
+        searchRoot.classList.toggle("is-open", open);
+    }
+    if (searchInput) {
+        searchInput.setAttribute("aria-expanded", String(open));
+        if (!open) {
+            searchInput.removeAttribute("aria-activedescendant");
+        }
+    }
+    updateSearchUiState();
+}
+
+function setSearchScope(scope) {
+    searchScope = scope || "all";
+    searchScopeButtons.forEach((button) => {
+        const selected = button.dataset.searchScope === searchScope;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-selected", String(selected));
+    });
+    setSearchOpen(true);
+    if ((searchInput?.value || "").trim().length >= 2) {
+        queueSearch();
+    } else {
+        clearSearchResults();
+    }
+    searchInput?.focus();
+}
+
+function projectTitleForSearch(project) {
+    const escapedProject = CSS.escape(project);
+    const article = projectArticles.get(project);
+    const referenceButton = article?.querySelector("[data-reference-open][data-reference-project='" + escapedProject + "']");
+    const card = document.querySelector("[data-project-card='" + escapedProject + "']");
+    return referenceButton?.dataset.referenceProjectName
+        || card?.querySelector("h3")?.textContent?.trim()
+        || project;
+}
+
+function buildCommandSearchItems() {
+    const items = [];
+    const references = Array.from(document.querySelectorAll("[data-reference-open][data-reference-url]"));
+    references.forEach((button) => {
+        const project = button.dataset.referenceProject || "";
+        const url = button.dataset.referenceUrl || "";
+        if (!project || !url) {
+            return;
+        }
+        const projectTitle = button.dataset.referenceProjectName || projectTitleForSearch(project);
+        const referenceKind = button.dataset.referenceKind || "";
+        const kind = referenceKind === "api" ? "api" : "configuration-reference";
+        const title = referenceKind === "api" ? projectTitle + " API / Javadoc" : projectTitle + " configuration reference";
+        const detail = referenceKind === "api" ? "API and Javadoc reference" : "Configuration reference";
+        items.push({
+            kind,
+            project,
+            projectTitle,
+            title,
+            href: "#" + (firstSections[project] || project),
+            detail,
+            referenceKind,
+            referenceUrl: url,
+            searchText: projectTitle + " " + project + " " + title + " " + detail + " reference docs javadoc api configuration"
+        });
+    });
+    projectCards.forEach((card) => {
+        const project = card.dataset.projectCard || "";
+        if (!project) {
+            return;
+        }
+        const projectTitle = card.querySelector("h3")?.textContent?.trim() || projectTitleForSearch(project);
+        const repositoryLink = Array.from(card.querySelectorAll("a[href]"))
+            .find((link) => /github\.com/i.test(link.href));
+        const repositoryUrl = repositoryLink?.getAttribute("href") || "";
+        if (!repositoryUrl) {
+            return;
+        }
+        const version = card.querySelector(".project-card-version")?.textContent?.trim() || "";
+        items.push({
+            kind: "repository",
+            project,
+            projectTitle,
+            title: projectTitle + " repository",
+            href: repositoryUrl,
+            detail: version ? "GitHub repository, " + version : "GitHub repository",
+            externalUrl: repositoryUrl,
+            searchText: projectTitle + " " + project + " github repository source module metadata " + version + " " + repositoryUrl
+        });
+    });
+    return items;
+}
+
+function searchItemKey(item) {
+    return [
+        item.kind || "",
+        item.project || "",
+        item.title || "",
+        item.referenceUrl || item.externalUrl || item.href || ""
+    ].join("|");
+}
+
+function augmentSearchIndex(index) {
+    if (!index || index.__platformAugmented) {
+        return index;
+    }
+    index.items = Array.isArray(index.items) ? index.items : [];
+    index.terms = index.terms || {};
+    const existing = new Set(index.items.map(searchItemKey));
+    buildCommandSearchItems().forEach((item) => {
+        const key = searchItemKey(item);
+        if (existing.has(key)) {
+            return;
+        }
+        existing.add(key);
+        index.items.push(item);
+        addSearchIndexTerms(index, index.items.length - 1, item.searchText || item.title || "");
+    });
+    Object.defineProperty(index, "__platformAugmented", {
+        value: true,
+        enumerable: false
+    });
+    return index;
 }
 
 function updateProjectFilterUiState() {
@@ -182,16 +860,21 @@ function setProjectFilterOpen(open) {
 function updateSearchUiState() {
     const hasValue = Boolean(searchInput?.value);
     const hasResults = Boolean(searchResults && !searchResults.hidden);
-    const active = Boolean(searchRoot && searchRoot.contains(document.activeElement));
+    const open = Boolean(searchDialog && !searchDialog.hidden);
+    const active = Boolean(searchRoot && searchRoot.contains(document.activeElement)) || open;
     if (searchClear) {
         searchClear.hidden = !hasValue;
         searchClear.setAttribute("aria-hidden", String(!hasValue));
         searchClear.tabIndex = hasValue ? 0 : -1;
     }
+    if (searchInput) {
+        searchInput.setAttribute("aria-expanded", String(open));
+    }
     if (searchRoot) {
         searchRoot.classList.toggle("has-value", hasValue);
         searchRoot.classList.toggle("has-results", hasResults);
         searchRoot.classList.toggle("is-active", active);
+        searchRoot.classList.toggle("is-open", open);
     }
 }
 
@@ -280,7 +963,7 @@ function loadSearchIndex() {
                 .catch(() => buildSidebarSearchIndex());
         }
     }
-    return searchIndexPromise;
+    return searchIndexPromise.then(augmentSearchIndex);
 }
 
 function loadSearchIndexScript() {
@@ -433,27 +1116,11 @@ function requestProjectDocument(project, article) {
 
 function hydrateGuideDocument(article) {
     try {
-        if (typeof createCopyToClipboardElement === "function") {
-            article.querySelectorAll(".multi-language-sample").forEach((sample) => {
-                if (!sample.querySelector(".copytoclipboard")) {
-                    sample.appendChild(createCopyToClipboardElement());
-                }
-            });
-        }
-        if (typeof postProcessCodeBlocks === "function") {
-            postProcessCodeBlocks();
-        }
+        upgradeCodeBlocks(article);
+        ensureMultiLanguageSelectors(article);
+        integrateMultiLanguageTabs(article);
         if (typeof postProcessCodeCallouts === "function") {
             postProcessCodeCallouts();
-        }
-        if (window.hljs) {
-            article.querySelectorAll("pre code:not(.hljs)").forEach((code) => {
-                if (typeof window.hljs.highlightElement === "function") {
-                    window.hljs.highlightElement(code);
-                } else if (typeof window.hljs.highlightBlock === "function") {
-                    window.hljs.highlightBlock(code);
-                }
-            });
         }
     } catch (errorValue) {
         console.warn("Documentation loaded, but post-processing failed.", errorValue);
@@ -533,19 +1200,26 @@ function prefetchProjectDocument(project) {
     });
 }
 
-function closeSearchResults() {
+function clearSearchResults() {
     if (searchResults) {
         searchResults.hidden = true;
         searchResults.innerHTML = "";
     }
     searchActiveIndex = -1;
+    searchInput?.removeAttribute("aria-activedescendant");
     updateSearchUiState();
+}
+
+function closeSearchResults() {
+    clearSearchResults();
+    setSearchOpen(false);
 }
 
 function setSearchActive(index) {
     const links = Array.from(searchResults?.querySelectorAll("[data-search-result]") || []);
     if (!links.length) {
         searchActiveIndex = -1;
+        searchInput?.removeAttribute("aria-activedescendant");
         return;
     }
     searchActiveIndex = Math.max(0, Math.min(index, links.length - 1));
@@ -553,7 +1227,11 @@ function setSearchActive(index) {
         link.classList.toggle("active", linkIndex === searchActiveIndex);
         link.setAttribute("aria-selected", String(linkIndex === searchActiveIndex));
     });
-    links[searchActiveIndex]?.scrollIntoView({ block: "nearest" });
+    const activeResult = links[searchActiveIndex];
+    if (activeResult?.id) {
+        searchInput?.setAttribute("aria-activedescendant", activeResult.id);
+    }
+    activeResult?.scrollIntoView({ block: "nearest" });
 }
 
 function scoreSearchResult(item, tokens, queryText, matchedTokenCount) {
@@ -582,6 +1260,10 @@ function scoreSearchResult(item, tokens, queryText, matchedTokenCount) {
         score += 72;
     } else if (item.kind === "configuration") {
         score += 24;
+    } else if (item.kind === "configuration-reference" || item.kind === "api") {
+        score += 28;
+    } else if (item.kind === "repository") {
+        score += 18;
     }
     for (const token of tokens) {
         if (title.startsWith(token)) {
@@ -618,8 +1300,9 @@ function findSearchResults(index, query) {
             };
         })
         .sort((left, right) => right.score - left.score || left.item.title.localeCompare(right.item.title))
-        .slice(0, 12)
-        .map((result) => result.item);
+        .map((result) => result.item)
+        .filter(searchScopeMatchesItem)
+        .slice(0, 16);
 }
 
 function renderSearchResults(results, query) {
@@ -627,31 +1310,44 @@ function renderSearchResults(results, query) {
         return;
     }
     if (!query.trim() || query.trim().length < 2) {
-        closeSearchResults();
+        clearSearchResults();
         return;
     }
+    setSearchOpen(true);
     searchResults.hidden = false;
     searchActiveIndex = -1;
+    searchInput?.removeAttribute("aria-activedescendant");
     if (!results.length) {
         searchResults.innerHTML = "<div class=\"site-search-empty\">No results</div>";
         updateSearchUiState();
         return;
     }
-    searchResults.innerHTML = results.map((item) => {
+    searchResults.innerHTML = results.map((item, resultIndex) => {
         const isProject = item.kind === "project";
         const isConfiguration = item.kind === "configuration";
+        const isExternal = Boolean(item.externalUrl);
         const projectAttribute = isProject ? " data-search-project-link" : "";
         const referenceAttribute = item.referenceUrl
-            ? ` data-search-reference-url="${escapeHtml(item.referenceUrl)}" data-search-reference-kind="configuration" data-search-project="${escapeHtml(item.project)}"`
+            ? ` data-search-reference-url="${escapeHtml(item.referenceUrl)}" data-search-reference-kind="${escapeHtml(item.referenceKind || item.kind || "configuration")}" data-search-project="${escapeHtml(item.project)}"`
             : "";
-        const resultLabel = isProject ? "Project" : item.projectTitle;
-        const resultDetail = isProject ? "Project documentation" : isConfiguration ? "Configuration property" : item.kind === "content" ? "Documentation match" : "Documentation section";
+        const externalAttribute = isExternal
+            ? ` data-search-external-url="${escapeHtml(item.externalUrl)}" target="_blank" rel="noopener"`
+            : "";
+        const resultLabel = searchKindLabel(item);
+        const resultDetail = searchResultDetail(item);
         const resultTitle = isProject || isConfiguration ? item.title : searchDisplayTitle(item.projectTitle, item.title);
+        const projectLabel = isProject ? item.detail || "Project documentation" : item.projectTitle;
         return `
-            <a class="site-search-result" href="${escapeHtml(item.href)}" data-search-result${projectAttribute}${referenceAttribute} aria-selected="false">
-                <span class="site-search-result-kind">${escapeHtml(resultLabel)}</span>
-                <strong>${escapeHtml(resultTitle)}</strong>
-                <small>${escapeHtml(resultDetail)}</small>
+            <a id="site-search-result-${resultIndex}" class="site-search-result" href="${escapeHtml(item.href)}" data-search-result data-search-kind="${escapeHtml(item.kind || "")}"${projectAttribute}${referenceAttribute}${externalAttribute} role="option" aria-selected="false">
+                ${searchCommandIcon(item.kind)}
+                <span class="site-search-result-body">
+                    <span class="site-search-result-meta">
+                        <span class="site-search-result-kind">${escapeHtml(resultLabel)}</span>
+                        <span class="site-search-result-project">${escapeHtml(projectLabel || "")}</span>
+                    </span>
+                    <strong>${escapeHtml(resultTitle)}</strong>
+                    <small>${escapeHtml(resultDetail)}</small>
+                </span>
             </a>
         `;
     }).join("");
@@ -660,9 +1356,10 @@ function renderSearchResults(results, query) {
 
 function runSearch() {
     const query = searchInput?.value || "";
+    setSearchOpen(true);
     updateSearchUiState();
     if (query.trim().length < 2) {
-        closeSearchResults();
+        clearSearchResults();
         return;
     }
     if (searchResults) {
@@ -911,6 +1608,39 @@ function setReferenceExpanded(expanded) {
     }
 }
 
+function referenceSwitchLabel(kind, title) {
+    if (kind === "api") {
+        return "API / Javadoc";
+    }
+    if (kind === "configuration") {
+        return "Configuration";
+    }
+    return title || "Reference";
+}
+
+function renderReferenceSwitcher(project, activeKind) {
+    if (!referenceSwitcher) {
+        return;
+    }
+    const article = projectSections.get(project)?.article || projectArticles.get(project);
+    const buttons = Array.from(article?.querySelectorAll("[data-reference-open][data-reference-url]") || []);
+    if (buttons.length < 2) {
+        referenceSwitcher.hidden = true;
+        referenceSwitcher.innerHTML = "";
+        return;
+    }
+    referenceSwitcher.hidden = false;
+    referenceSwitcher.innerHTML = buttons.map((button) => {
+        const kind = button.dataset.referenceKind || "";
+        const selected = kind === activeKind;
+        return `
+            <button class="reference-switch" type="button" role="tab" aria-selected="${selected}" data-reference-switch-kind="${escapeHtml(kind)}">
+                ${escapeHtml(referenceSwitchLabel(kind, button.dataset.referenceTitle))}
+            </button>
+        `;
+    }).join("");
+}
+
 function openReference(button, options) {
     if (!referencePanel || !referenceFrame || !button) {
         return;
@@ -920,11 +1650,13 @@ function openReference(button, options) {
     if (!url) {
         return;
     }
+    const wasHidden = referencePanel.hidden;
     if (activeReferenceButton && activeReferenceButton !== button) {
         activeReferenceButton.setAttribute("aria-pressed", "false");
     }
     activeReferenceButton = button;
     activeReferenceKind = button.dataset.referenceKind || "";
+    activeReferenceProject = button.dataset.referenceProject || settings.project || activeReferenceProject;
     button.setAttribute("aria-pressed", "true");
     document.body.classList.add("reference-open");
     referencePanel.hidden = false;
@@ -946,6 +1678,10 @@ function openReference(button, options) {
         referenceFrame.src = url;
     }
     referenceFrame.title = projectName ? projectName + " " + title : title;
+    renderReferenceSwitcher(activeReferenceProject, activeReferenceKind);
+    if (wasHidden) {
+        referencePanel.focus({ preventScroll: true });
+    }
     focusReferenceTarget(url);
 }
 
@@ -1021,6 +1757,7 @@ function closeReference() {
     }
     activeReferenceButton = undefined;
     activeReferenceKind = "";
+    activeReferenceProject = "";
     document.body.classList.remove("reference-open");
     setReferenceExpanded(false);
     if (referencePanel) {
@@ -1034,6 +1771,10 @@ function closeReference() {
     }
     if (referenceOpenNew) {
         referenceOpenNew.removeAttribute("href");
+    }
+    if (referenceSwitcher) {
+        referenceSwitcher.hidden = true;
+        referenceSwitcher.innerHTML = "";
     }
 }
 
@@ -1253,6 +1994,18 @@ projectCards.forEach((card) => {
 });
 
 document.addEventListener("click", (event) => {
+    const copyButton = event.target.closest("[data-copy-code]");
+    if (copyButton) {
+        event.preventDefault();
+        copyModernCodeBlock(copyButton);
+        return;
+    }
+    const searchScopeButton = event.target.closest("[data-search-scope]");
+    if (searchScopeButton) {
+        event.preventDefault();
+        setSearchScope(searchScopeButton.dataset.searchScope);
+        return;
+    }
     if (clickIsOutsideOpenSidebar(event)) {
         closeSidebar();
     }
@@ -1293,6 +2046,16 @@ document.addEventListener("click", (event) => {
         }
     } else if (searchRoot && !searchRoot.contains(event.target)) {
         closeSearchResults();
+    }
+    const referenceSwitch = event.target.closest("[data-reference-switch-kind]");
+    if (referenceSwitch) {
+        event.preventDefault();
+        const article = projectSections.get(activeReferenceProject)?.article || projectArticles.get(activeReferenceProject);
+        const referenceButton = article?.querySelector("[data-reference-open][data-reference-kind='" + CSS.escape(referenceSwitch.dataset.referenceSwitchKind || "") + "']");
+        if (referenceButton) {
+            openReference(referenceButton);
+        }
+        return;
     }
     const referenceTrigger = event.target.closest("[data-reference-open]");
     if (referenceTrigger) {
@@ -1385,9 +2148,11 @@ themeSwitcher?.addEventListener("click", () => switchTheme());
 
 searchInput?.addEventListener("input", queueSearch);
 searchInput?.addEventListener("focus", () => {
-    updateSearchUiState();
+    setSearchOpen(true);
     if (searchInput.value.trim().length >= 2) {
         queueSearch();
+    } else {
+        clearSearchResults();
     }
 });
 searchRoot?.addEventListener("focusin", updateSearchUiState);
@@ -1428,6 +2193,20 @@ searchClear?.addEventListener("click", () => {
 });
 
 window.addEventListener("keydown", (event) => {
+    const target = event.target instanceof Element ? event.target : undefined;
+    const editing = Boolean(target?.closest("input, textarea, select, [contenteditable='true']"));
+    if ((event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !editing)
+        || (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) {
+        event.preventDefault();
+        setSearchOpen(true);
+        searchInput?.focus();
+        searchInput?.select();
+        return;
+    }
+    if (event.key === "Escape" && searchDialog && !searchDialog.hidden) {
+        closeSearchResults();
+        return;
+    }
     if (event.key === "Escape" && referencePanel && !referencePanel.hidden) {
         closeReference();
     }

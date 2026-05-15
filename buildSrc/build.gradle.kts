@@ -3,10 +3,14 @@ plugins {
 }
 
 dependencies {
+    implementation(libs.asciidoctorj)
+    implementation(libs.grails.gdoc.engine)
     implementation(libs.handlebars)
     implementation(libs.lucide.static)
-    implementation(libs.micronaut.gradle.plugins)
+    implementation(files("../gradle/build-plugin/micronaut-gradle-plugins-${libs.versions.micronaut.build.get()}.jar"))
+    implementation(libs.node.gradle.plugin)
     implementation(libs.snakeyaml)
+    implementation(libs.tomlj)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.playwright)

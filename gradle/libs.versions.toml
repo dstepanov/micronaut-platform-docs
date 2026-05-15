@@ -1,17 +1,24 @@
 [versions]
+asciidoctorj = "3.0.0"
+grails-gdoc-engine = "1.0.1"
 handlebars = "4.5.0"
 junit-jupiter = "5.11.4"
 junit-platform = "1.11.4"
 micronaut-build = "8.0.0-M18"
+node-gradle = "7.1.0"
 lucide-static = "0.562.0"
 playwright = "1.59.0"
 snakeyaml = "2.6"
+tomlj = "1.1.1"
 
 [libraries]
+asciidoctorj = { module = "org.asciidoctor:asciidoctorj", version.ref = "asciidoctorj" }
+grails-gdoc-engine = { module = "org.grails:grails-gdoc-engine", version.ref = "grails-gdoc-engine" }
 handlebars = { module = "com.github.jknack:handlebars", version.ref = "handlebars" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 lucide-static = { module = "org.webjars.npm:lucide-static", version.ref = "lucide-static" }
-micronaut-gradle-plugins = { module = "io.micronaut.build.internal:micronaut-gradle-plugins", version.ref = "micronaut-build" }
+node-gradle-plugin = { module = "com.github.node-gradle.node:com.github.node-gradle.node.gradle.plugin", version.ref = "node-gradle" }
 playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }

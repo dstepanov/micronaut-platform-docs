@@ -44,13 +44,22 @@ final class PlatformDocsSearchTest {
     private static final String BROWSER_CHANNEL = System.getProperty("platformDocs.browserChannel", "chrome");
     private static final String CONFIGURATION_PROPERTY = "netty.default.allocator.num-heap-arenas";
     private static final String CONFIGURATION_PROPERTY_ANCHOR = "configuration-property-netty-default-allocator-num-heap-arenas";
+    private static final Map<String, String> TEST_PROJECTS = Map.of(
+        "core", "Micronaut Core",
+        "serde", "Micronaut Serialization",
+        "data", "Micronaut Data",
+        "mcp", "Micronaut MCP",
+        "oracle-cloud", "Micronaut Oracle Cloud",
+        "sourcegen", "Micronaut Sourcegen"
+    );
 
     @Test
-    void searchFixtureContainsCoreSerdeAndRequiredIndexTerms() throws IOException {
+    void searchFixtureContainsTestProjectsAndRequiredIndexTerms() throws IOException {
         assertRenderedSiteExists();
         String html = Files.readString(INDEX_FILE, StandardCharsets.UTF_8);
-        assertTrue(html.contains("data-project=\"core\""), "The rendered search fixture must include Micronaut Core.");
-        assertTrue(html.contains("data-project=\"serde\""), "The rendered search fixture must include Micronaut Serialization.");
+        for (Map.Entry<String, String> project : TEST_PROJECTS.entrySet()) {
+            assertTrue(html.contains("data-project=\"" + project.getKey() + "\""), "The rendered search fixture must include " + project.getValue() + ".");
+        }
         assertTrue(html.contains("data-project-category=\"most-popular\""), "The rendered overview must include the Most Popular category.");
         assertTrue(html.contains("data-project-category=\"api\""), "The rendered overview must include the API category.");
         assertTrue(html.contains("Frequently used framework, data, security, API, messaging, and integration modules."), "The rendered overview must include docs-index category descriptions.");
@@ -62,13 +71,47 @@ final class PlatformDocsSearchTest {
         assertTrue(sidebarHtml.contains("data-sidebar-category=\"most-popular\""), "The sidebar must include the Most Popular category.");
         assertTrue(sidebarHtml.contains("data-sidebar-category=\"api\""), "The sidebar must include the API category.");
         assertFalse(sidebarHtml.contains("sidebar-category-count"), "The sidebar must not show category counts.");
+        for (Map.Entry<String, String> project : TEST_PROJECTS.entrySet()) {
+            assertTrue(sidebarHtml.contains("data-project-option=\"" + project.getKey() + "\""), "The sidebar must include " + project.getValue() + ".");
+            Path projectDocument = SITE_DIRECTORY.resolve("platform-assets/documents/" + project.getKey() + ".html");
+            assertTrue(Files.isRegularFile(projectDocument), "The rendered site must include the " + project.getValue() + " lazy-loaded document.");
+        }
+
+        Path coreDocument = SITE_DIRECTORY.resolve("platform-assets/documents/core.html");
+        String coreHtml = Files.readString(coreDocument, StandardCharsets.UTF_8);
+        assertTrue(coreHtml.contains("docs-code-block"), "The rendered Core guide must use the modern code block renderer.");
+        assertTrue(coreHtml.contains("data-copy-code"), "The rendered Core guide must include copy buttons for code samples.");
+        assertFalse(coreHtml.contains("docs-code-language-single"), "Single-language code samples must not render a language toolbar.");
+        assertFalse(coreHtml.contains("<span class=\"docs-code-language docs-code-language-single\">Bash</span>"), "Code samples must not show Bash labels.");
+        assertFalse(coreHtml.contains("<span class=\"docs-code-language docs-code-language-single\">Text</span>"), "Unknown code samples must not show Text labels.");
+
+        Path serdeDocument = SITE_DIRECTORY.resolve("platform-assets/documents/serde.html");
+        String serdeHtml = Files.readString(serdeDocument, StandardCharsets.UTF_8);
+        assertTrue(serdeHtml.contains("docs-code-block"), "The rendered Serde guide must use the modern code block renderer.");
+        assertTrue(serdeHtml.contains("data-copy-code"), "The rendered Serde guide must include copy buttons for code samples.");
+        assertTrue(serdeHtml.contains("class=\"shiki shiki-themes"), "The rendered guide must contain static Shiki highlighted code.");
+        assertTrue(serdeHtml.contains("--shiki-light:"), "The rendered guide must contain light Shiki token colors.");
+        assertTrue(serdeHtml.contains("--shiki-dark:"), "The rendered guide must contain dark Shiki token colors.");
+        assertFalse(serdeHtml.contains("intellij-platform-"), "Static Shiki highlighting must not use the IntelliJ theme.");
+        assertFalse(serdeHtml.contains("<p>        <div class=\"listingblock"), "Generated code blocks must not be wrapped in paragraph tags.");
+        assertFalse(serdeHtml.contains("<p><div class=\"listingblock"), "Generated code blocks must not be wrapped in paragraph tags.");
+
+        Path sourcegenDocument = SITE_DIRECTORY.resolve("platform-assets/documents/sourcegen.html");
+        String sourcegenHtml = Files.readString(sourcegenDocument, StandardCharsets.UTF_8);
+        assertFalse(sourcegenHtml.contains("<pre>`public static String [BeanName]Object.toString"), "Indented inline code must not render as a literal block with backticks.");
+        assertFalse(sourcegenHtml.contains("<pre>`public static int [BeanName]Object.hashCode"), "Indented inline code must not render as a literal block with backticks.");
+        assertTrue(sourcegenHtml.contains("class=\"language-java shiki-code\" data-lang=\"java\""), "Indented Java signatures must render as highlighted code blocks.");
+        assertTrue(sourcegenHtml.contains("docs-code-dependency-snippet"), "Dependency snippets must receive the dependency code block style.");
+        assertTrue(sourcegenHtml.contains("[BeanName]Object."), "Sourcegen generated-method signatures must remain visible.");
 
         Path searchIndex = SITE_DIRECTORY.resolve("platform-assets/search-index.json");
         assertTrue(Files.isRegularFile(searchIndex), "The rendered search fixture must include a search index.");
         String indexJson = Files.readString(searchIndex, StandardCharsets.UTF_8);
         assertTrue(indexJson.contains("applicationcontext"), "The search index must include compact API type terms.");
         assertTrue(indexJson.contains("nettydefaultallocatornumheaparenas"), "The search index must include compact configuration property terms.");
-        assertTrue(indexJson.contains("\"project\":\"serde\""), "The search index must include serde entries.");
+        for (String slug : TEST_PROJECTS.keySet()) {
+            assertTrue(indexJson.contains("\"project\":\"" + slug + "\""), "The search index must include " + slug + " entries.");
+        }
     }
 
     @Test
@@ -160,6 +203,9 @@ final class PlatformDocsSearchTest {
                 page.locator("[data-project-option='core']").click();
                 waitForLoadedProject(page, "core");
                 assertNoVisibleDocumentationError(page, "core");
+                assertProjectHasHighlightedCode(page, "core");
+                assertProjectHighlightsCodeWithCallouts(page, "core");
+                assertProjectCodeTitlesAreOutsideFrames(page, "core");
                 assertEquals("core", page.evaluate("() => document.body.dataset.project"));
 
                 page.locator(".topbar-title a[href='#platform']").click();
@@ -167,7 +213,20 @@ final class PlatformDocsSearchTest {
                 page.locator("[data-project-card='serde']").click();
                 waitForLoadedProject(page, "serde");
                 assertNoVisibleDocumentationError(page, "serde");
+                assertProjectHasMultiLanguageToolbarTabs(page, "serde");
                 assertEquals("serde", page.evaluate("() => document.body.dataset.project"));
+
+                for (String project : List.of("data", "mcp", "oracle-cloud", "sourcegen")) {
+                    page.locator(".topbar-title a[href='#platform']").click();
+                    page.waitForFunction("() => document.body.classList.contains('overview-active')");
+                    page.locator("[data-project-card='" + project + "']").click();
+                    waitForLoadedProject(page, project);
+                    assertNoVisibleDocumentationError(page, project);
+                    if ("oracle-cloud".equals(project)) {
+                        assertProjectDependencyTabsAreScopedToOneGroup(page, project);
+                    }
+                    assertEquals(project, page.evaluate("() => document.body.dataset.project"));
+                }
             } catch (TimeoutError e) {
                 throw new AssertionError("Project documentation did not load after clicking the sidebar project or overview card.", e);
             } finally {
@@ -366,6 +425,135 @@ final class PlatformDocsSearchTest {
                 "}",
             project
         ), "Documentation error must stay hidden and visually absent for " + project);
+    }
+
+    private static void assertProjectHasHighlightedCode(Page page, String project) {
+        page.waitForFunction(
+                "project => {" +
+                    "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "return Boolean(article?.querySelector('pre.shiki code .line span[style*=\"--shiki-light\"]'));" +
+                "}",
+            project
+        );
+    }
+
+    private static void assertProjectHighlightsCodeWithCallouts(Page page, String project) {
+        page.waitForFunction(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "return Array.from(article?.querySelectorAll('pre code') || []).some((code) => " +
+                    "code.textContent.includes('HelloControllerSpec') && " +
+                    "code.closest('pre')?.classList.contains('shiki') && " +
+                    "code.querySelector('.line span[style*=\"--shiki-light\"]') && " +
+                    "code.querySelector('i.conum'));" +
+                "}",
+            project
+        );
+    }
+
+    private static void assertProjectCodeTitlesAreOutsideFrames(Page page, String project) {
+        page.waitForFunction(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "const titles = Array.from(article?.querySelectorAll('.docs-code-title') || []);" +
+                "return titles.length > 0 && titles.every((title) => !title.closest('.docs-code-block'));" +
+                "}",
+            project
+        );
+    }
+
+    private static void assertProjectHasMultiLanguageToolbarTabs(Page page, String project) {
+        page.waitForFunction(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "const tabGroups = Array.from(article?.querySelectorAll('.docs-code-tabs-multi') || []);" +
+                "return tabGroups.some((tabs) => tabs.querySelectorAll('[role=tab][data-lang]').length > 1)" +
+                    " && Boolean(article?.querySelector('.docs-code-tabs-multi [role=tab][data-lang=java]'))" +
+                    " && Boolean(article?.querySelector('.docs-code-tabs-multi [role=tab][data-lang=kotlin]'));" +
+                "}",
+            project
+        );
+        assertTrue((Boolean) page.evaluate(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "return Array.from(article?.querySelectorAll('.docs-code-toolbar') || []).some((toolbar) => " +
+                    "toolbar.querySelector('.docs-code-tabs-multi') && !toolbar.querySelector('.docs-code-language-single'));" +
+                "}",
+            project
+        ), "Multi-language code toolbars must use tabs instead of a single language label.");
+        assertTrue((Boolean) page.evaluate(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "return Array.from(article?.querySelectorAll('.multi-language-selector') || []).every((selector) => " +
+                    "getComputedStyle(selector).display === 'none');" +
+                "}",
+            project
+        ), "Legacy multi-language selectors must stay hidden when toolbar tabs are used.");
+        assertTrue((Boolean) page.evaluate(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "return Array.from(article?.querySelectorAll('.docs-code-block:not(.multi-language-sample)') || []).some((block) => " +
+                    "!block.querySelector(':scope > .docs-code-toolbar') && " +
+                    "block.querySelector(':scope > .docs-code-copy') && " +
+                    "block.querySelector(':scope > .docs-code-copy + .docs-code-content'));" +
+                "}",
+            project
+        ), "Single-language code blocks must use an overlay copy button without a top toolbar.");
+    }
+
+    private static void assertProjectDependencyTabsAreScopedToOneGroup(Page page, String project) {
+        page.waitForFunction(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "const ids = Array.from(new Set(Array.from(article?.querySelectorAll('.docs-code-tabs-multi[data-source-selector]') || [])" +
+                    ".map((tabs) => tabs.dataset.sourceSelector)))" +
+                    ".filter((id) => {" +
+                        "const selector = article.querySelector(`[data-docs-tabs-id=\"${id}\"]`);" +
+                        "const languages = Array.from(selector?.querySelectorAll('.language-option') || []).map((option) => option.getAttribute('data-lang'));" +
+                        "return languages.includes('gradle') && languages.includes('maven');" +
+                    "});" +
+                "return ids.length >= 2;" +
+            "}",
+            project
+        );
+        assertTrue((Boolean) page.evaluate(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "const ids = Array.from(new Set(Array.from(article?.querySelectorAll('.docs-code-tabs-multi[data-source-selector]') || [])" +
+                    ".map((tabs) => tabs.dataset.sourceSelector)))" +
+                    ".filter((id) => {" +
+                        "const selector = article.querySelector(`[data-docs-tabs-id=\"${id}\"]`);" +
+                        "const languages = Array.from(selector?.querySelectorAll('.language-option') || []).map((option) => option.getAttribute('data-lang'));" +
+                        "return languages.includes('gradle') && languages.includes('maven');" +
+                    "});" +
+                "const visibleLanguage = (id) => {" +
+                    "const selector = article.querySelector(`[data-docs-tabs-id=\"${id}\"]`);" +
+                    "let sample = selector?.nextElementSibling;" +
+                    "while (sample?.classList?.contains('multi-language-sample')) {" +
+                        "if (!sample.classList.contains('hidden')) {" +
+                            "return sample.getAttribute('data-lang');" +
+                        "}" +
+                        "sample = sample.nextElementSibling;" +
+                    "}" +
+                    "return '';" +
+                "};" +
+                "const selectedLanguage = (id) => Array.from(new Set(Array.from(article.querySelectorAll(`[data-source-selector=\"${id}\"] [role=tab].selected`))" +
+                    ".map((tab) => tab.getAttribute('data-lang'))));" +
+                "const first = ids[0];" +
+                "const second = ids[1];" +
+                "if (visibleLanguage(first) !== 'gradle' || visibleLanguage(second) !== 'gradle') {" +
+                    "return false;" +
+                "}" +
+                "article.querySelector(`[data-source-selector=\"${first}\"] [data-lang=\"maven\"]`)?.click();" +
+                "const firstSelected = selectedLanguage(first);" +
+                "const secondSelected = selectedLanguage(second);" +
+                "return visibleLanguage(first) === 'maven'" +
+                    " && visibleLanguage(second) === 'gradle'" +
+                    " && firstSelected.length === 1 && firstSelected[0] === 'maven'" +
+                    " && secondSelected.length === 1 && secondSelected[0] === 'gradle';" +
+            "}",
+            project
+        ), "Switching one dependency tab must not switch other dependency tab groups.");
     }
 
     private static Playwright createPlaywright() {

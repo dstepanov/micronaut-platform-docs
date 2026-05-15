@@ -95,7 +95,7 @@ jobs:
           retention-days: 1
 
   test-layout:
-    name: Test two-doc layout
+    name: Test six-doc layout
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: plan
@@ -118,9 +118,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Test two-doc layout
+      - name: Test six-doc layout
         run: |
-          ./gradlew -q -PplatformDocs.projectSlugs=core,serde verifyPlatformDocs
+          ./gradlew -q -PplatformDocs.projectSlugs=core,serde,data,mcp,oracle-cloud,sourcegen verifyPlatformDocs
           ./gradlew :buildSrc:test
 
   render:

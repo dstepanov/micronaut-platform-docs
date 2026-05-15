@@ -1,15 +1,23 @@
 package io.micronaut.docs;
 
+import com.github.gradle.node.NodeExtension;
+import com.github.gradle.node.npm.task.NpmTask;
+import com.github.gradle.node.task.NodeTask;
+
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.plugins.BasePlugin;
+import org.gradle.api.tasks.Copy;
 import org.gradle.api.tasks.TaskProvider;
+
+import java.util.List;
 
 public final class PlatformDocsPlugin implements Plugin<Project> {
 
     @Override
     public void apply(Project project) {
         project.getPluginManager().apply(BasePlugin.class);
+        project.getPluginManager().apply("com.github.node-gradle.node");
 
         var platformVersionCatalog = project.getLayout().getProjectDirectory().file("repos/micronaut-platform/gradle/libs.versions.toml");
         var projectManifest = project.getLayout().getProjectDirectory().file("gradle/platform-doc-projects.properties");
@@ -17,7 +25,13 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
         var descriptionCatalog = project.getLayout().getProjectDirectory().file("gradle/platform-doc-descriptions.properties");
         var iconCatalog = project.getLayout().getProjectDirectory().file("gradle/platform-doc-icons.properties");
         var categoryCatalog = project.getLayout().getProjectDirectory().file("gradle/platform-doc-categories.properties");
+        var outputDirectory = project.getLayout().getBuildDirectory().dir("site");
         var shardPlan = project.getLayout().getProjectDirectory().file(PlatformDocsShardPlan.DEFAULT_RELATIVE_PATH);
+        var shikiSourceDirectory = project.getLayout().getProjectDirectory().dir("buildSrc/src/main/resources/io/micronaut/docs/shiki");
+        var shikiWorkDirectory = project.getLayout().getBuildDirectory().dir("shiki");
+        var shikiWorkDirectoryFile = project.getLayout().getBuildDirectory().file("shiki");
+        var shikiNpmCache = project.getLayout().getBuildDirectory().dir("npm-cache");
+        var siteDocumentDirectory = project.getLayout().getBuildDirectory().dir("site/platform-assets/documents");
         var guideShardIndex = project.getProviders()
             .gradleProperty("platformDocs.guideShardIndex")
             .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_GUIDE_SHARD_INDEX"))
@@ -32,6 +46,45 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             .gradleProperty("platformDocs.projectSlugs")
             .orElse(project.getProviders().environmentVariable("PLATFORM_DOCS_PROJECT_SLUGS"))
             .orElse("");
+
+        project.getExtensions().configure(NodeExtension.class, node -> {
+            node.getDownload().set(false);
+            node.getVersion().set(project.getProviders().gradleProperty("platformDocs.nodeVersion").orElse("22.13.1"));
+            node.getWorkDir().set(project.getLayout().getBuildDirectory().dir("nodejs"));
+            node.getNpmWorkDir().set(project.getLayout().getBuildDirectory().dir("npm"));
+            node.getNodeProjectDir().set(shikiWorkDirectory);
+        });
+
+        TaskProvider<Copy> preparePlatformDocsShiki = project.getTasks().register(
+            "preparePlatformDocsShiki",
+            Copy.class,
+            task -> {
+                task.setGroup("documentation");
+                task.setDescription("Stages the locked Shiki highlighter package used for static code highlighting.");
+                task.from(shikiSourceDirectory);
+                task.into(shikiWorkDirectory);
+            }
+        );
+
+        TaskProvider<NpmTask> installPlatformDocsShiki = project.getTasks().register(
+            "installPlatformDocsShiki",
+            NpmTask.class,
+            task -> {
+                task.setGroup("documentation");
+                task.setDescription("Installs locked Shiki dependencies with the Gradle Node plugin.");
+                task.dependsOn(preparePlatformDocsShiki);
+                task.getWorkingDir().set(shikiWorkDirectoryFile);
+                task.getArgs().set(project.getProviders().provider(() -> List.of(
+                    "ci",
+                    "--ignore-scripts",
+                    "--no-audit",
+                    "--fund=false",
+                    "--cache",
+                    shikiNpmCache.get().getAsFile().getAbsolutePath()
+                )));
+                task.getEnvironment().put("npm_config_cache", shikiNpmCache.map(directory -> directory.getAsFile().getAbsolutePath()));
+            }
+        );
 
         TaskProvider<SyncPlatformSubmoduleTask> syncPlatformSubmodule = project.getTasks().register(
             "syncPlatformSubmodule",
@@ -183,7 +236,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getDescriptionCatalog().convention(descriptionCatalog);
                 task.getIconCatalog().convention(iconCatalog);
                 task.getCategoryCatalog().convention(categoryCatalog);
-                task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("site"));
+                task.getOutputDirectory().convention(outputDirectory);
                 task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
                 task.dependsOn(verifyPlatformAlignment);
@@ -204,12 +257,34 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getDescriptionCatalog().convention(descriptionCatalog);
                 task.getIconCatalog().convention(iconCatalog);
                 task.getCategoryCatalog().convention(categoryCatalog);
-                task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("site"));
+                task.getOutputDirectory().convention(outputDirectory);
                 task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
                 task.getOutputs().upToDateWhen(taskProvider -> false);
             }
         );
+
+        TaskProvider<NodeTask> highlightGeneratedPlatformDocs = staticHighlightTask(
+            project,
+            "highlightGeneratedPlatformDocs",
+            "Applies static Shiki syntax highlighting to the generated platform docs site.",
+            installPlatformDocsShiki,
+            siteDocumentDirectory,
+            shikiWorkDirectory,
+            generatePlatformDocs
+        );
+        generatePlatformDocs.configure(task -> task.finalizedBy(highlightGeneratedPlatformDocs));
+
+        TaskProvider<NodeTask> highlightRenderedPlatformDocs = staticHighlightTask(
+            project,
+            "highlightRenderedPlatformDocs",
+            "Applies static Shiki syntax highlighting to the rendered platform docs site.",
+            installPlatformDocsShiki,
+            siteDocumentDirectory,
+            shikiWorkDirectory,
+            renderPlatformDocs
+        );
+        renderPlatformDocs.configure(task -> task.finalizedBy(highlightRenderedPlatformDocs));
 
         TaskProvider<VerifyPlatformDocsTask> verifyPlatformDocs = project.getTasks().register(
             "verifyPlatformDocs",
@@ -221,6 +296,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectManifest().convention(projectManifest);
                 task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(generatePlatformDocs);
+                task.dependsOn(highlightGeneratedPlatformDocs);
             }
         );
 
@@ -234,6 +310,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectManifest().convention(projectManifest);
                 task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(renderPlatformDocs);
+                task.dependsOn(highlightRenderedPlatformDocs);
             }
         );
 
@@ -250,5 +327,35 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             task.setGroup("verification");
             task.setDescription("Placeholder Spotless check; no Spotless formatting rules are configured yet.");
         });
+    }
+
+    private static TaskProvider<NodeTask> staticHighlightTask(
+        Project project,
+        String name,
+        String description,
+        TaskProvider<NpmTask> installPlatformDocsShiki,
+        org.gradle.api.provider.Provider<org.gradle.api.file.Directory> siteDocumentDirectory,
+        org.gradle.api.provider.Provider<org.gradle.api.file.Directory> shikiWorkDirectory,
+        TaskProvider<GeneratePlatformDocsTask> renderTask
+    ) {
+        return project.getTasks().register(
+            name,
+            NodeTask.class,
+            task -> {
+                task.setGroup("documentation");
+                task.setDescription(description);
+                task.dependsOn(installPlatformDocsShiki);
+                task.mustRunAfter(renderTask);
+                task.getScript().set(shikiWorkDirectory.map(directory -> directory.file("highlight.mjs")));
+                task.getWorkingDir().set(shikiWorkDirectory);
+                task.getArgs().set(project.getProviders().provider(() -> {
+                    String documentsPath = siteDocumentDirectory.get().getAsFile().getAbsolutePath();
+                    return List.of(documentsPath, documentsPath);
+                }));
+                task.getInputs().dir(siteDocumentDirectory);
+                task.getOutputs().dir(siteDocumentDirectory);
+                task.getOutputs().upToDateWhen(taskProvider -> false);
+            }
+        );
     }
 }

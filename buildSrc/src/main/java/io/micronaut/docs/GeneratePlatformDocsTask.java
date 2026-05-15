@@ -117,6 +117,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final Pattern CONFIGURATION_PROPERTY_ROW = Pattern.compile("<tr(\\b[^>]*)>\\s*(<td\\b[^>]*>\\s*<p\\b[^>]*>\\s*<code>(.*?)</code>\\s*</p>\\s*</td>)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_TAG = Pattern.compile("<svg\\b([^>]*)>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_CLASS = Pattern.compile("\\bclass\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SVG_VIEW_BOX = Pattern.compile("\\bviewBox\\s*=\\s*\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern SVG_TITLE = Pattern.compile("<title\\b[^>]*>.*?</title>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_ROLE = Pattern.compile("\\s+role\\s*=\\s*\"[^\"]*\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern SVG_ARIA_HIDDEN = Pattern.compile("\\s+aria-hidden\\s*=\\s*\"[^\"]*\"", Pattern.CASE_INSENSITIVE);
@@ -185,7 +186,13 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             }
             getLogger().quiet("[{}/{}] Reading and copying {}.", ++index, projects.size(), project.displayName());
             copyGeneratedDocs(projectDirectory, outputDirectory, project);
-            String html = Files.readString(guideHtml, StandardCharsets.UTF_8);
+            String platformVersion = platformVersions.get(project.platformVersionKey());
+            getLogger().quiet("[{}/{}] Rendering {} guide with the Micronaut docs engine.", index, projects.size(), project.displayName());
+            String html = renderProjectGuideHtml(
+                projectDirectory,
+                project,
+                platformVersion
+            );
             documents.add(parseGuide(project, html, projectDirectory.resolve(project.tocPath()), platformVersions.get(project.platformVersionKey())));
         }
 
@@ -368,7 +375,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         try (InputStream input = GeneratePlatformDocsTask.class.getClassLoader().getResourceAsStream(GUIDE_THEME_RESOURCE)) {
             if (input == null) {
                 throw new IOException("Missing Micronaut guide resource " + GUIDE_THEME_RESOURCE
-                    + ". The buildSrc classpath must contain io.micronaut.build.internal:micronaut-gradle-plugins.");
+                    + ". The buildSrc classpath must contain the Micronaut docs build plugin jar from gradle/build-plugin.");
             }
             try (JarInputStream jar = new JarInputStream(input)) {
                 var entry = jar.getNextJarEntry();
@@ -386,6 +393,21 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
                 }
             }
         }
+        guardMultiLanguageHighlightCalls(targetDirectory.resolve("js/multi-language-sample.js"));
+    }
+
+    private static void guardMultiLanguageHighlightCalls(Path script) throws IOException {
+        if (!Files.isRegularFile(script)) {
+            return;
+        }
+        String content = Files.readString(script, StandardCharsets.UTF_8);
+        String guarded = content.replace(
+            "hljs.highlightBlock(codeEl);",
+            "if (window.hljs && typeof hljs.highlightBlock === \"function\") { hljs.highlightBlock(codeEl); }"
+        );
+        if (!guarded.equals(content)) {
+            Files.writeString(script, guarded, StandardCharsets.UTF_8);
+        }
     }
 
     private static boolean isGuideThemeAsset(String relativePath) {
@@ -394,6 +416,14 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             || normalized.equals("img/micronaut-logo-white.svg")
             || normalized.equals("img/note.gif")
             || normalized.equals("img/warning.gif");
+    }
+
+    private static String renderProjectGuideHtml(
+        Path projectDirectory,
+        GuideProject project,
+        String platformVersion
+    ) throws IOException {
+        return new ModernGuideRenderer(projectDirectory, project, platformVersion).render();
     }
 
     private static void copyDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
@@ -882,14 +912,91 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
     }
 
-    private static Map<String, Object> scriptModel(List<GuideDocument> documents) {
+    private static Map<String, Object> scriptModel(List<GuideDocument> documents) throws IOException {
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("firstSections", firstSectionModels(documents));
         model.put("searchIndexUrl", SITE_ASSET_PATH + "/search-index.json");
         model.put("searchIndexScriptUrl", SITE_ASSET_PATH + "/search-index.js");
         model.put("sidebarMenuUrl", SITE_ASSET_PATH + "/sidebar-menu.html");
         model.put("sidebarMenuScriptUrl", SITE_ASSET_PATH + "/sidebar-menu.js");
+        model.put("codeLanguageIcons", codeLanguageIconsJson());
         return model;
+    }
+
+    private static String codeLanguageIconsJson() throws IOException {
+        Map<String, CodeLanguageIcon> icons = new LinkedHashMap<>();
+        putBrandLanguageIcon(icons, "gradle", "gradle");
+        putBrandLanguageIcon(icons, "graphql", "graphql");
+        putBrandLanguageIcon(icons, "groovy", "apachegroovy");
+        putBrandLanguageIcon(icons, "html", "html5");
+        putBrandLanguageIcon(icons, "java", "openjdk");
+        putBrandLanguageIcon(icons, "javascript", "javascript");
+        putBrandLanguageIcon(icons, "json", "json");
+        putBrandLanguageIcon(icons, "kotlin", "kotlin");
+        putBrandLanguageIcon(icons, "maven", "apachemaven");
+        putBrandLanguageIcon(icons, "python", "python");
+        putBrandLanguageIcon(icons, "shell", "gnubash");
+        putBrandLanguageIcon(icons, "toml", "toml");
+        putBrandLanguageIcon(icons, "typescript", "typescript");
+        putBrandLanguageIcon(icons, "yaml", "yaml");
+        icons.put("hocon", strokeLanguageIcon("""
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><path d="M14 2v6h6"></path><path d="M9 12H8a2 2 0 0 0-2 2v1a2 2 0 0 1-1 1.73A2 2 0 0 1 6 18.46V20"></path><path d="M15 12h1a2 2 0 0 1 2 2v1a2 2 0 0 0 1 1.73 2 2 0 0 0-1 1.73V20"></path>
+            """));
+        icons.put("properties", strokeLanguageIcon("""
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><path d="M14 2v6h6"></path><path d="M8 12h3"></path><path d="M13 12h3"></path><path d="M8 16h2"></path><path d="M12 16h4"></path>
+            """));
+        icons.put("protobuf", strokeLanguageIcon("""
+            <path d="M7 3h7l4 4v14H7Z"></path><path d="M14 3v5h4"></path><path d="M10 12h4"></path><path d="M10 16h4"></path>
+            """));
+        icons.put("sql", strokeLanguageIcon("""
+            <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"></path>
+            """));
+        icons.put("text", strokeLanguageIcon("""
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><path d="M14 2v6h6"></path><path d="M8 13h8"></path><path d="M8 17h5"></path>
+            """));
+        icons.put("xml", strokeLanguageIcon("""
+            <path d="m8 16-4-4 4-4"></path><path d="m16 8 4 4-4 4"></path><path d="m14 4-4 16"></path>
+            """));
+        StringBuilder json = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, CodeLanguageIcon> entry : icons.entrySet()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            CodeLanguageIcon icon = entry.getValue();
+            json.append('"').append(jsonString(entry.getKey())).append("\":{")
+                .append("\"viewBox\":\"").append(jsonString(icon.viewBox())).append("\",")
+                .append("\"body\":\"").append(jsonString(icon.body())).append("\",")
+                .append("\"fill\":").append(icon.fill())
+                .append('}');
+        }
+        return json.append('}').toString();
+    }
+
+    private static void putBrandLanguageIcon(Map<String, CodeLanguageIcon> icons, String language, String iconName) throws IOException {
+        icons.put(language, svgLanguageIcon(resourceText(BRAND_ICON_RESOURCE_ROOT + iconName + ".svg"), true));
+    }
+
+    private static CodeLanguageIcon strokeLanguageIcon(String body) {
+        return new CodeLanguageIcon("0 0 24 24", body.strip(), false);
+    }
+
+    private static CodeLanguageIcon svgLanguageIcon(String svg, boolean fill) throws IOException {
+        String normalized = SVG_TITLE.matcher(svg).replaceAll("").trim();
+        Matcher matcher = SVG_TAG.matcher(normalized);
+        if (!matcher.find()) {
+            throw new IOException("Language icon does not contain an svg element.");
+        }
+        Matcher viewBoxMatcher = SVG_VIEW_BOX.matcher(matcher.group(1));
+        if (!viewBoxMatcher.find()) {
+            throw new IOException("Language icon does not contain a viewBox attribute.");
+        }
+        int endTag = normalized.toLowerCase(Locale.ROOT).lastIndexOf("</svg>");
+        if (endTag < matcher.end()) {
+            throw new IOException("Language icon does not contain a closing svg element.");
+        }
+        return new CodeLanguageIcon(viewBoxMatcher.group(1), normalized.substring(matcher.end(), endTag).trim(), fill);
     }
 
     private static Map<String, Object> sidebarMenuModel(Path projectDirectory, List<GuideDocument> documents, Properties descriptions, Properties projectIcons, List<ProjectCategory> categories) throws IOException {
@@ -1551,6 +1658,9 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     }
 
     private record ProjectDescription(String shortDescription, String longDescription) {
+    }
+
+    private record CodeLanguageIcon(String viewBox, String body, boolean fill) {
     }
 
     private record ProjectCategory(String slug, String name, String icon, String description, Set<String> projectSlugs) {

@@ -238,6 +238,20 @@ The site is generated as plain static HTML, CSS, and JavaScript from Gradle. It 
 
 The HTML frame, sidebar project sections, TOC entries, and JavaScript data are rendered through Handlebars. The TOC model is parsed from each project's `toc.yml` using SnakeYAML and rendered with a single recursive partial; the renderer enables `Handlebars.infiniteLoops(true)` because Handlebars.java disables recursive partials by default. The root Gradle task still builds all guide content from the git submodules, copies their generated docs under `build/site/assets/<project>/docs`, and writes the platform UI assets under `build/site/platform-assets`. Shared guide CSS, JavaScript, fonts, and default images are copied from the Micronaut build plugin classpath instead of from any generated submodule docs directory.
 
+## UI Palette
+
+The main page stylesheet is `buildSrc/src/main/resources/io/micronaut/docs/assets/site.css`. Generated platform pages must import `platform-assets/site.css` only; old guide styles are copied for assets and iframes, not imported into the shell.
+
+The palette is token-first. Light mode uses `--bg #f7f9fb`, `--surface #ffffff`, `--card-surface #ffffff`, `--text #172026`, `--muted #5d6b78`, `--line #d8e1e7`, Micronaut green `--accent #00a676`, and link blue `--link #1565c0`. Dark mode keeps the sidebar and top bar black while content surfaces use neutral grays: `--bg #333333`, `--surface #333333`, `--card-surface #262626`, `--surface-strong #222222`, `--text #dddddd`, `--muted #aaaaaa`, `--line #444444`, salmon accent `--accent #ff9686`, and link blue `--link #77aeff`.
+
+Code snippets have dedicated neutral tokens so they match the gray documentation surface instead of becoming blue-gray panels. Light code frames use `--code-frame-bg #f7f8fa`, `--code-frame-border #e0e3e8`, and dependency frames use `--code-dependency-bg #f6f7f8`, `--code-dependency-border #d9dee4`. Dark code frames use `--code-frame-bg #303030`, `--code-frame-border #484848`; dependency snippets use `--code-dependency-bg #343434`, `--code-dependency-border #4d4d4d`. Shiki owns token colors statically through `--shiki-light` and `--shiki-dark`; the browser does not run runtime syntax highlighting.
+
+## Design Evaluation
+
+The current UI is intended to feel like a compact developer documentation application. The strongest pieces are the black/white sidebar shell, sticky command bar, command-palette search, categorized overview cards, neutral code blocks, and sheet-style reference panel. Dark mode is the most distinctive version because black chrome is separated from gray reading surfaces.
+
+The main design risks are guide headings that feel too large on desktop, sparse overview sections when a category has only one card, and embedded API/configuration pages that can still look like legacy pages inside the reference sheet. Detailed design rules and the current audit notes live in `AGENTS.md`.
+
 ## Troubleshooting
 
 - If `buildPlatformGuideDocs` reports a missing submodule, run `./gradlew -q syncPlatformProjectSubmodules`.

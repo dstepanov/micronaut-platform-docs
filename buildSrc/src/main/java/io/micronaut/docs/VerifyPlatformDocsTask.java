@@ -22,6 +22,10 @@ import java.util.regex.Pattern;
 
 public abstract class VerifyPlatformDocsTask extends DefaultTask {
     private static final Pattern SECTION = Pattern.compile("\\bdata-section=\"([^\"]+)\"");
+    private static final Pattern CODE_SAMPLE_IMPORTANT_STYLE = Pattern.compile(
+        "\\.(?:docs-code|multi-language-(?:selector|sample))[^{}]*\\{[^}]*!important",
+        Pattern.DOTALL
+    );
 
     @InputFile
     @PathSensitive(PathSensitivity.RELATIVE)
@@ -77,6 +81,7 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
             require(Files.isRegularFile(documentFile), "Missing lazy document fragment for " + project.slug());
             require(Files.isRegularFile(documentScriptFile), "Missing lazy document script fallback for " + project.slug());
             String documentHtml = Files.readString(documentFile, StandardCharsets.UTF_8);
+            require(!documentHtml.contains("intellij-platform-"), "Generated code highlighting still uses the IntelliJ Shiki theme for " + project.slug());
             for (String section : sections) {
                 require(documentHtml.contains("id=\"" + section + "\""), "Missing content anchor " + section + " for " + project.slug());
             }
@@ -118,28 +123,34 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(html.contains("id=\"docs\""), "Generated page does not use the docs body id.");
         require(html.contains("href=\"platform-assets/site.css\""), "Generated page does not reference the external stylesheet.");
         require(html.contains("src=\"platform-assets/site.js\""), "Generated page does not reference the external script.");
-        require(html.contains("href=\"guide-assets/css/main.css\""), "Generated page does not reference the classpath Micronaut guide stylesheet.");
-        require(html.contains("href=\"guide-assets/css/custom.css\""), "Generated page does not reference the classpath Micronaut custom guide stylesheet.");
-        require(html.contains("href=\"guide-assets/css/highlight/agate.css\""), "Generated page does not reference the classpath Micronaut guide highlight stylesheet.");
-        require(html.contains("href=\"guide-assets/css/multi-language-sample.css\""), "Generated page does not reference the classpath Micronaut multi-language stylesheet.");
-        require(html.contains("src=\"guide-assets/js/highlight.pack.js\""), "Generated page does not reference the classpath Micronaut highlight script.");
+        require(!html.contains("href=\"guide-assets/css/"), "Generated page imports classpath Micronaut guide CSS.");
+        require(!html.contains("href=\"guide-assets/style/"), "Generated page imports old Micronaut guide template CSS.");
         require(html.contains("src=\"guide-assets/js/multi-language-sample.js\""), "Generated page does not reference the classpath Micronaut multi-language script.");
+        require(!html.contains("highlight.pack.js"), "Generated page still runs Highlight.js in the browser.");
+        require(!html.contains("initHighlightingOnLoad"), "Generated page still initializes runtime syntax highlighting.");
 
-        require(Files.isRegularFile(outputDirectory.resolve("guide-assets/css/main.css")), "Missing classpath Micronaut guide stylesheet asset.");
-        require(Files.isRegularFile(outputDirectory.resolve("guide-assets/css/tools.css")), "Missing classpath Micronaut Font Awesome stylesheet asset.");
-        require(Files.isRegularFile(outputDirectory.resolve("guide-assets/fonts/fontawesome-webfont.woff")), "Missing classpath Micronaut Font Awesome font asset.");
-        require(Files.isRegularFile(outputDirectory.resolve("guide-assets/js/highlight.pack.js")), "Missing classpath Micronaut highlight script asset.");
         require(Files.isRegularFile(outputDirectory.resolve("guide-assets/js/multi-language-sample.js")), "Missing classpath Micronaut multi-language script asset.");
         require(Files.isRegularFile(outputDirectory.resolve("platform-assets/logos/micronaut-horizontal-black.svg")), "Missing black Micronaut logo asset.");
         require(Files.isRegularFile(outputDirectory.resolve("platform-assets/logos/micronaut-horizontal-white.svg")), "Missing white Micronaut logo asset.");
         require(Files.isRegularFile(outputDirectory.resolve("platform-assets/icons/micronaut-sally.svg")), "Missing Micronaut Sally project icon asset.");
         String siteScript = Files.readString(outputDirectory.resolve("platform-assets/site.js"), StandardCharsets.UTF_8);
+        String siteCss = Files.readString(outputDirectory.resolve("platform-assets/site.css"), StandardCharsets.UTF_8);
         require(siteScript.contains("window.addEventListener(\"scroll\", queueScrollSpy"), "Generated script does not highlight sections while scrolling.");
         require(siteScript.contains("activeSectionFromScroll"), "Generated script does not include scroll spy section detection.");
         require(siteScript.contains("loadProjectDocument"), "Generated script does not lazy-load project documents.");
         require(siteScript.contains("loadSidebarMenu"), "Generated script does not lazy-load the sidebar menu.");
         require(siteScript.contains("openReference"), "Generated script does not support opening project references in context.");
         require(siteScript.contains("updateReferenceProject"), "Generated script does not keep project references aligned with the active project.");
+        require(siteScript.contains("const codeLanguageIcons = {"), "Generated script does not include the static code language icon registry.");
+        require(siteScript.contains("\"java\":{\"viewBox\""), "Generated script does not include the Java code snippet icon.");
+        require(siteScript.contains("\"kotlin\":{\"viewBox\""), "Generated script does not include the Kotlin code snippet icon.");
+        require(siteScript.contains("\"groovy\":{\"viewBox\""), "Generated script does not include the Groovy code snippet icon.");
+        require(siteScript.contains("\"maven\":{\"viewBox\""), "Generated script does not include the Maven dependency snippet icon.");
+        require(siteScript.contains("\"properties\":{\"viewBox\""), "Generated script does not include the properties snippet icon.");
+        require(!siteScript.contains("highlightGuideCode"), "Generated script still contains runtime syntax highlighting.");
+        require(!siteScript.contains("docs-code-language-hint"), "Generated script still adds code sample language hints.");
+        require(!siteCss.contains("docs-code-language-hint"), "Generated stylesheet still styles code sample language hints.");
+        require(!CODE_SAMPLE_IMPORTANT_STYLE.matcher(siteCss).find(), "Generated code sample styles still rely on !important.");
         getLogger().quiet("Verified generated platform docs page for {} projects.", projects.size());
     }
 
