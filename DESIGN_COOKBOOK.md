@@ -24,9 +24,9 @@ The site should feel like a compact developer documentation application: dense, 
 ## Tokens And Palette
 
 - Extend theme tokens before introducing new component colors.
-- Light mode uses a pale page background with white cards: `--bg #f7f9fb`, `--surface #ffffff`, `--card-surface #ffffff`, `--text #172026`, `--muted #5d6b78`, `--line #d8e1e7`, `--accent #00a676`, `--link #1565c0`.
+- Light mode uses a neutral gray page background with near-white panels: `--bg #f5f5f5`, `--surface #fcfcfc`, `--card-surface #ffffff`, `--surface-strong #eeeeee`, `--text #172026`, `--muted #5d6b78`, `--line #e0e0e0`, `--accent #00a676`, `--link #1565c0`.
 - Dark mode separates chrome from content: sidebar and top bar are black, while content surfaces use neutral grays. Keep dark reading surfaces gray rather than pure black.
-- Code and dependency snippets use neutral gray surfaces, not blue-gray or IDE-themed frames. Light mode uses white or near-white snippet panels over the pale page; dark mode uses deeper neutral gray panels over the gray article surface.
+- Code and dependency snippets use the same neutral code-frame palette, not blue-gray, IDE-themed, or dependency-specific frames. Light mode uses white or near-white snippet panels over the pale page; dark mode uses deeper neutral gray panels over the gray article surface.
 - Admonitions should be calm and low saturation unless the content is genuinely dangerous.
 
 ## Overview Page
@@ -46,7 +46,8 @@ The site should feel like a compact developer documentation application: dense, 
 - The left sidebar shows only project rows and top-level guide sections. Numbered subsections such as `1.1`, `1.2`, and `2.3.1` belong in the right-side page index instead of the left menu.
 - Project and TOC labels must remain readable. Avoid truncation that hides meaning; allow wrapping where needed.
 - Submenu hover and active highlights should leave a visible right gutter in the sidebar. Do not let nested TOC highlights run flush to the right edge.
-- Keep the expanded desktop sidebar compact, around 308px, so the article retains priority on laptop-sized screens.
+- Keep the expanded desktop sidebar compact, around 248px, so the article retains priority on laptop-sized screens. The mobile sidebar sheet should use the same approximate width unless a viewport constraint forces it narrower.
+- When the desktop sidebar is collapsed, the article content may use a slightly wider reading measure than the expanded-sidebar state so the detail area visibly benefits from the freed space.
 - Selecting a project should bring the project title and document actions into view without auto-scrolling the sidebar inventory. On mobile, outside clicks after a project selection should close the sidebar.
 
 ## Page Index
@@ -67,11 +68,13 @@ The site should feel like a compact developer documentation application: dense, 
 - On project pages, the breadcrumb includes the active project name for deep-link orientation. This is preferred over automatically scrolling the sidebar to the active project.
 - Keep version metadata small. It should not compete with search.
 - Icon buttons need accessible labels and stable square hit areas.
+- The light/dark theme toggle matches the search trigger height, stays transparent in both themes, and uses a darker monochrome icon so it reads as a utility control rather than a filled badge.
 
 ## Search
 
 - Search is the primary command surface and should look like a compact shadcn-style command menu: a top-bar trigger opens a wide dialog centered horizontally in the page, placed around the upper-middle of the viewport, the page behind it is blurred, the real search input sits inside the dialog, scope tabs stay quiet, keyboard focus is visible, and there is no marketing copy.
 - The placeholder names the actual searchable inventory: projects, API classes, configuration properties, and guide docs.
+- The search trigger stays compact in the top bar, but the opened dialog is a larger command surface. Dialog input text, scope controls, result titles, details, icons, empty states, and prompt text should be scaled for the wider panel rather than inheriting compact topbar sizing.
 - The open empty state should be useful, not blank. Show a short command heading and, in the All scope only, quiet `Class` and `Property` hint badges. Do not show hard-coded class names or property keys as suggestions.
 - Results use a stable hierarchy: icon, optional kind badge, optional project/context, title, and detail. Use kind badges only for Javadoc classes and configuration properties in the All scope.
 - Project results should be the simplest and strongest result rows: show the module name as the larger title, a short `Open documentation` detail, and no redundant `Project` label. Project-level documentation links use the project slug hash, such as `#data`, and open at the project title and metadata actions rather than the first guide section.
@@ -98,25 +101,32 @@ The site should feel like a compact developer documentation application: dense, 
 - Real snippet titles sit outside the code frame.
 - Unknown `[source]` snippets remain plaintext and must not be labeled Bash.
 - Shiki is static build-time highlighting only. Do not add runtime syntax highlighters.
-- Code frames must visibly separate from the guide background through background contrast, not outlines. Do not use visible borders or shadows on code frames.
-- Tabs and code frames use the same neutral family. Avoid a visible separator between the tab row and code body; tab labels should use compact system-sans typography around `12px / 16px`, regular weight, with only a modest selected-weight increase, and inactive labels must still meet readable contrast in both themes.
+- Code frames separate from the guide background with a neutral frame surface plus a quiet 1px outer border. The light border is visible but soft; the dark border should be nearly invisible and subordinate to the darker frame background. Do not add shadows.
+- Dependency snippets share the same background, separator, and copy-button surface tokens as normal code snippets in both light and dark mode. Gradle and Maven tabs should not introduce a second color system.
+- Tabs and code frames use the same neutral family. Keep a single split line between the tab row and code body: visible in light mode, almost invisible in dark mode. Tab labels should use compact system-sans typography around `12px / 16px`, regular weight, with only a modest selected-weight increase, and inactive labels must still meet readable contrast in both themes.
 - Language icons in code tabs inherit the tab text color. Keep them gray and monochrome so tabs read as quiet controls, not a strip of brand badges.
-- The Java language tab uses a Java-cup inspired line icon instead of the OpenJDK mark. Keep the shape recognizable but subdued through the same gray tab color as the other languages.
+- Code language icons are generated from SVG resources. Brand icons live under `assets/icons/brands`; project-owned generic format icons live under `assets/icons/languages`. Do not add fallback SVG path data to JavaScript templates.
+- The Java language tab uses a filled Java-cup inspired icon with no wordmark instead of the OpenJDK mark. Keep the shape recognizable but subdued through the same gray tab color as the other languages.
 - Filled brand glyphs such as Kotlin can be optically smaller than line icons so their visual weight matches Java and Properties in the tab row.
 - The Properties language tab uses a small sliders-style line icon. It should suggest key/value configuration without looking like a document badge or a separate status color.
-- Code titles stay outside the frame and read like compact captions: sans-serif, muted but readable, no border, no filled title bar.
+- Code titles stay outside the frame and share the same compact caption treatment as table captions and image titles: sans-serif, muted but readable, no border, no filled title bar. Keep the title close to the code frame it names, including multi-language samples where hidden selector markup may sit between the title and block.
 
 ## Admonitions
 
 - Admonitions stay in document flow and keep content left aligned.
-- Use one calm icon, neutral background, and subtle accent color. Note, tip, important, warning, and caution may have different icon accents, but the container is separated by background contrast instead of borders.
+- Use one calm icon, neutral background, and subtle accent color. Note, important, warning, and caution may have different icon accents, but the container stays low saturation.
+- Light-mode tips use the most neutral callout treatment: a near-transparent dark tint, soft neutral 1px border, larger radius, compact padding, and smaller readable text. They should read like quiet inline guidance, not a green status panel.
 - Avoid saturated status panels and colorful backgrounds unless severity demands it.
 
 ## Tables
 
 - Tables use a rounded neutral frame with a quiet header background and subtle row striping.
-- Table captions are document captions, not old Asciidoctor labels: sans-serif, non-italic, muted, left aligned, and wrapped normally.
+- Table captions are document captions, not old Asciidoctor labels. They share the same compact caption treatment as code titles and image titles: sans-serif, non-italic, muted, left aligned, and wrapped normally.
 - Configuration property names in table cells keep a small inline-code background so long keys remain scannable.
+
+## Images
+
+- Image titles belong to the same document caption group as code titles and table captions. Keep them compact, sans-serif, non-italic, muted, left aligned, and close to the image they describe.
 
 ## Reference Sheet
 

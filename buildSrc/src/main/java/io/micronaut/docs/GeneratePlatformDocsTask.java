@@ -53,6 +53,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String LOGO_WHITE_RESOURCE = "/io/micronaut/docs/assets/logos/micronaut-horizontal-white.svg";
     private static final String MICRONAUT_SALLY_RESOURCE = "/io/micronaut/docs/assets/icons/micronaut-sally.svg";
     private static final String BRAND_ICON_RESOURCE_ROOT = "/io/micronaut/docs/assets/icons/brands/";
+    private static final String LANGUAGE_ICON_RESOURCE_ROOT = "/io/micronaut/docs/assets/icons/languages/";
     private static final String LUCIDE_PROPERTIES_RESOURCE = "META-INF/maven/org.webjars.npm/lucide-static/pom.properties";
     private static final String LUCIDE_ICON_ROOT = "META-INF/resources/webjars/lucide-static/%s/icons/";
     private static final Set<String> GUIDE_THEME_DIRECTORIES = Set.of("css/", "fonts/", "img/default/", "js/", "style/");
@@ -1141,9 +1142,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         putBrandLanguageIcon(icons, "graphql", "graphql");
         putBrandLanguageIcon(icons, "groovy", "apachegroovy");
         putBrandLanguageIcon(icons, "html", "html5");
-        icons.put("java", strokeLanguageIcon("""
-            <path d="M9.1 2.8c2.4 1.6-2.3 2.7.1 4.4"></path><path d="M13 2c2.8 1.9-2.5 3.1.2 5.2"></path><path d="M16.5 3.8c2 1.4-1.8 2.4.1 3.9"></path><path d="M5.4 10.7c2.5.9 9.5.9 12.2 0"></path><path d="M6.2 13c2.3.7 8.2.7 10.7 0"></path><path d="M7.6 15.1c2 .5 5.9.5 8.3 0"></path><path d="M18.2 11.8c2.6.5 2.9 2.3.8 3.4-.9.5-2 .8-3.1.9"></path><path d="M6.8 17.8c2.9 1.5 8.6 1.5 11.4 0"></path><path d="M8.4 20.5h7.6"></path>
-            """));
+        putFilledLanguageIcon(icons, "java", "java");
         putBrandLanguageIcon(icons, "javascript", "javascript");
         putBrandLanguageIcon(icons, "json", "json");
         putBrandLanguageIcon(icons, "kotlin", "kotlin");
@@ -1153,24 +1152,12 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         putBrandLanguageIcon(icons, "toml", "toml");
         putBrandLanguageIcon(icons, "typescript", "typescript");
         putBrandLanguageIcon(icons, "yaml", "yaml");
-        icons.put("hocon", strokeLanguageIcon("""
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><path d="M14 2v6h6"></path><path d="M9 12H8a2 2 0 0 0-2 2v1a2 2 0 0 1-1 1.73A2 2 0 0 1 6 18.46V20"></path><path d="M15 12h1a2 2 0 0 1 2 2v1a2 2 0 0 0 1 1.73 2 2 0 0 0-1 1.73V20"></path>
-            """));
-        icons.put("properties", strokeLanguageIcon("""
-            <path d="M4.5 7h7"></path><path d="M15.5 7h4"></path><path d="M4.5 12h4"></path><path d="M12.5 12h7"></path><path d="M4.5 17h9"></path><path d="M17.5 17h2"></path><circle cx="13.5" cy="7" r="2"></circle><circle cx="10.5" cy="12" r="2"></circle><circle cx="15.5" cy="17" r="2"></circle>
-            """));
-        icons.put("protobuf", strokeLanguageIcon("""
-            <path d="M7 3h7l4 4v14H7Z"></path><path d="M14 3v5h4"></path><path d="M10 12h4"></path><path d="M10 16h4"></path>
-            """));
-        icons.put("sql", strokeLanguageIcon("""
-            <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"></path>
-            """));
-        icons.put("text", strokeLanguageIcon("""
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><path d="M14 2v6h6"></path><path d="M8 13h8"></path><path d="M8 17h5"></path>
-            """));
-        icons.put("xml", strokeLanguageIcon("""
-            <path d="m8 16-4-4 4-4"></path><path d="m16 8 4 4-4 4"></path><path d="m14 4-4 16"></path>
-            """));
+        putLanguageIcon(icons, "hocon", "hocon");
+        putLanguageIcon(icons, "properties", "properties");
+        putLanguageIcon(icons, "protobuf", "protobuf");
+        putLanguageIcon(icons, "sql", "sql");
+        putLanguageIcon(icons, "text", "text");
+        putLanguageIcon(icons, "xml", "xml");
         StringBuilder json = new StringBuilder("{");
         boolean first = true;
         for (Map.Entry<String, CodeLanguageIcon> entry : icons.entrySet()) {
@@ -1192,8 +1179,12 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         icons.put(language, svgLanguageIcon(resourceText(BRAND_ICON_RESOURCE_ROOT + iconName + ".svg"), true));
     }
 
-    private static CodeLanguageIcon strokeLanguageIcon(String body) {
-        return new CodeLanguageIcon("0 0 24 24", body.strip(), false);
+    private static void putLanguageIcon(Map<String, CodeLanguageIcon> icons, String language, String iconName) throws IOException {
+        icons.put(language, svgLanguageIcon(resourceText(LANGUAGE_ICON_RESOURCE_ROOT + iconName + ".svg"), false));
+    }
+
+    private static void putFilledLanguageIcon(Map<String, CodeLanguageIcon> icons, String language, String iconName) throws IOException {
+        icons.put(language, svgLanguageIcon(resourceText(LANGUAGE_ICON_RESOURCE_ROOT + iconName + ".svg"), true));
     }
 
     private static CodeLanguageIcon svgLanguageIcon(String svg, boolean fill) throws IOException {
@@ -1659,6 +1650,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("longDescription", description.longDescription());
         model.put("description", description.longDescription());
         model.put("version", document.version());
+        model.put("sidebarTitle", document.version().isBlank() ? project.displayName() : project.displayName() + " " + document.version());
         model.put("firstSection", firstFragment(document));
         model.put("documentPath", projectDocumentPath(project, ".html"));
         model.put("documentScriptPath", projectDocumentPath(project, ".js"));
