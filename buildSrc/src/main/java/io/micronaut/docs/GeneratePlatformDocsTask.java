@@ -1092,7 +1092,47 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("sidebarMenuUrl", SITE_ASSET_PATH + "/sidebar-menu.html");
         model.put("sidebarMenuScriptUrl", SITE_ASSET_PATH + "/sidebar-menu.js");
         model.put("codeLanguageIcons", codeLanguageIconsJson());
+        model.put("pageIndexItems", pageIndexItemsJson(documents));
         return model;
+    }
+
+    private static String pageIndexItemsJson(List<GuideDocument> documents) {
+        StringBuilder json = new StringBuilder(1024 * 32);
+        json.append('{');
+        for (int documentIndex = 0; documentIndex < documents.size(); documentIndex++) {
+            GuideDocument document = documents.get(documentIndex);
+            if (documentIndex > 0) {
+                json.append(',');
+            }
+            json.append('"').append(jsonString(document.project().slug())).append("\":[");
+            for (int itemIndex = 0; itemIndex < document.tocItems().size(); itemIndex++) {
+                TocItem item = document.tocItems().get(itemIndex);
+                String number = tocItemPlainText(item.numberHtml());
+                String title = tocItemPlainText(item.titleHtml());
+                String label = number.isBlank() ? title : number + " " + title;
+                if (itemIndex > 0) {
+                    json.append(',');
+                }
+                json.append('{')
+                    .append("\"id\":\"").append(jsonString(item.prefixedId())).append("\",")
+                    .append("\"number\":\"").append(jsonString(number)).append("\",")
+                    .append("\"title\":\"").append(jsonString(title)).append("\",")
+                    .append("\"label\":\"").append(jsonString(label)).append("\",")
+                    .append("\"level\":").append(Math.max(0, item.level()))
+                    .append('}');
+            }
+            json.append(']');
+        }
+        return json.append('}').toString();
+    }
+
+    private static String tocItemPlainText(String html) {
+        return normalizePlainText(stripTags(html)
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&amp;", "&"));
     }
 
     private static String codeLanguageIconsJson() throws IOException {

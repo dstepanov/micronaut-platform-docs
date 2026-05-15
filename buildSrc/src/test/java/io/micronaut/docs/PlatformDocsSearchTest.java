@@ -72,6 +72,8 @@ final class PlatformDocsSearchTest {
         assertTrue(sidebarHtml.contains("data-sidebar-category=\"most-popular\""), "The sidebar must include the Most Popular category.");
         assertTrue(sidebarHtml.contains("data-sidebar-category=\"api\""), "The sidebar must include the API category.");
         assertFalse(sidebarHtml.contains("sidebar-category-count"), "The sidebar must not show category counts.");
+        assertFalse(sidebarHtml.contains("project-filter"), "The sidebar must not include the removed project filter.");
+        assertFalse(sidebarHtml.contains("data-project-filter"), "The sidebar must not include project filter controls.");
         assertFalse(sidebarHtml.contains("class=\"toc-children\""), "The sidebar must keep subsections out of the left menu.");
         assertFalse(sidebarHtml.contains("href=\"#core-whatsNew\""), "The sidebar must not render second-level Core subsections.");
         for (Map.Entry<String, String> project : TEST_PROJECTS.entrySet()) {
@@ -84,6 +86,9 @@ final class PlatformDocsSearchTest {
         String coreHtml = Files.readString(coreDocument, StandardCharsets.UTF_8);
         assertTrue(coreHtml.contains("docs-code-block"), "The rendered Core guide must use the modern code block renderer.");
         assertTrue(coreHtml.contains("data-copy-code"), "The rendered Core guide must include copy buttons for code samples.");
+        assertTrue(coreHtml.contains("guide-section-heading"), "Guide headings must be wrapped for hover-only edit actions.");
+        assertTrue(coreHtml.contains("class=\"contribute-btn\""), "Guide headings must include the icon-only edit action.");
+        assertFalse(coreHtml.contains(">Improve this doc<"), "The edit action must not render visible Improve this doc text.");
         assertFalse(coreHtml.contains("docs-code-language-single"), "Single-language code samples must not render a language toolbar.");
         assertFalse(coreHtml.contains("<span class=\"docs-code-language docs-code-language-single\">Bash</span>"), "Code samples must not show Bash labels.");
         assertFalse(coreHtml.contains("<span class=\"docs-code-language docs-code-language-single\">Text</span>"), "Unknown code samples must not show Text labels.");
@@ -122,6 +127,13 @@ final class PlatformDocsSearchTest {
         for (String slug : TEST_PROJECTS.keySet()) {
             assertTrue(indexJson.contains("\"project\":\"" + slug + "\""), "The search index must include " + slug + " entries.");
         }
+
+        Path siteScript = SITE_DIRECTORY.resolve("platform-assets/site.js");
+        assertTrue(Files.isRegularFile(siteScript), "The rendered site must include a generated script.");
+        String siteJs = Files.readString(siteScript, StandardCharsets.UTF_8);
+        assertTrue(siteJs.contains("const pageIndexItems = {"), "The right rail must use the generated TOC-backed page index model.");
+        assertTrue(siteJs.contains("\"serde-jacksonQuick\""), "The right rail model must include Serialization subsections beyond the introduction.");
+        assertTrue(siteJs.contains("\"mcp-resourcesTemplates\""), "The right rail model must include deep MCP subsections.");
     }
 
     @Test
@@ -282,6 +294,10 @@ final class PlatformDocsSearchTest {
                 assertNoVisibleDocumentationError(page, "serde");
                 assertProjectHasMultiLanguageToolbarTabs(page, "serde");
                 assertPageIndexListsSection(page, "serde", "1.1 Why Micronaut Serialization?", "serde-why");
+                page.locator(".toc a[href='#serde-releaseHistory']").click();
+                page.waitForFunction("() => document.querySelector('[data-page-index]')?.hidden");
+                page.locator(".toc a[href='#serde-quickStart']").click();
+                assertPageIndexListsSection(page, "serde", "3.1 Jackson Annotations & Jackson Core", "serde-jacksonQuick");
                 assertEquals("serde", page.evaluate("() => document.body.dataset.project"));
 
                 for (String project : List.of("data", "mcp", "oracle-cloud", "sourcegen")) {
@@ -294,6 +310,10 @@ final class PlatformDocsSearchTest {
                     assertNoVisibleDocumentationError(page, project);
                     if ("oracle-cloud".equals(project)) {
                         assertProjectDependencyTabsAreScopedToOneGroup(page, project);
+                    }
+                    if ("mcp".equals(project)) {
+                        page.locator(".toc a[href='#mcp-server']").click();
+                        assertPageIndexListsSection(page, "mcp", "3.7.3.4 Resources Templates", "mcp-resourcesTemplates");
                     }
                     assertEquals(project, page.evaluate("() => document.body.dataset.project"));
                 }
@@ -594,7 +614,7 @@ final class PlatformDocsSearchTest {
         Locator link = page.locator("[data-page-index-link][href='#" + sectionId + "']");
         link.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE));
         assertEquals(label, link.innerText().trim());
-        assertTrue(page.locator("[data-page-index]").innerText().contains("On this page"), "The page index must expose an On this page heading.");
+        assertTrue(page.locator("[data-page-index]").innerText().contains("In this section"), "The page index must expose an In this section heading.");
     }
 
     private static void assertNoVisibleDocumentationError(Page page, String project) {

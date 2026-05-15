@@ -11,6 +11,7 @@ const searchIndexScriptUrl = "{{{searchIndexScriptUrl}}}";
 const sidebarMenuUrl = "{{{sidebarMenuUrl}}}";
 const sidebarMenuScriptUrl = "{{{sidebarMenuScriptUrl}}}";
 const codeLanguageIcons = {{{codeLanguageIcons}}};
+const pageIndexItems = {{{pageIndexItems}}};
 const overviewPage = document.querySelector("[data-overview]");
 const sidebarCollapse = document.querySelector(".sidebar-collapse");
 const sidebarCollapseLabel = document.querySelector("[data-sidebar-collapse-label]");
@@ -18,11 +19,6 @@ const sidebarToggle = document.querySelector(".sidebar-toggle");
 const sidebarContent = document.querySelector(".sidebar-content");
 const sidebarMenu = document.querySelector("[data-sidebar-menu]");
 const themeSwitcher = document.querySelector("[data-theme-switcher]");
-const projectFilterRoot = document.querySelector("[data-project-filter]");
-const projectFilterToggle = document.querySelector("[data-project-filter-toggle]");
-const projectFilterInput = document.querySelector("[data-project-filter-input]");
-const projectFilterClear = document.querySelector("[data-project-filter-clear]");
-const projectFilterEmpty = document.querySelector("[data-project-filter-empty]");
 const searchRoot = document.querySelector("[data-search]");
 const searchTrigger = document.querySelector("[data-search-trigger]");
 const searchInput = document.querySelector("[data-search-input]");
@@ -590,16 +586,6 @@ function searchTokens(value) {
     return Array.from(tokens).slice(0, 6);
 }
 
-function projectFilterTokens(value) {
-    return normalizeSearchText(value)
-        .split(/\s+/)
-        .filter((token) => token.length > 0);
-}
-
-function projectFilterText(project, data) {
-    return normalizeSearchText(project + " " + (data.summary?.textContent || ""));
-}
-
 function searchCommandIcon(kind) {
     const normalizedKind = String(kind || "").toLowerCase();
     const icons = {
@@ -850,64 +836,6 @@ function augmentSearchIndex(index) {
     return index;
 }
 
-function updateProjectFilterUiState() {
-    const hasValue = Boolean(projectFilterInput?.value);
-    const open = Boolean(projectFilterRoot && !projectFilterRoot.hidden);
-    if (projectFilterToggle) {
-        projectFilterToggle.setAttribute("aria-expanded", String(open));
-        projectFilterToggle.classList.toggle("active", open || hasValue);
-    }
-    if (projectFilterClear) {
-        projectFilterClear.hidden = !hasValue;
-        projectFilterClear.setAttribute("aria-hidden", String(!hasValue));
-        projectFilterClear.tabIndex = hasValue ? 0 : -1;
-    }
-    if (projectFilterRoot) {
-        projectFilterRoot.classList.toggle("has-value", hasValue);
-    }
-}
-
-function applyProjectFilter() {
-    const tokens = projectFilterTokens(projectFilterInput?.value || "");
-    let visibleProjects = 0;
-    for (const [project, data] of projectSections.entries()) {
-        const matches = tokens.every((token) => projectFilterText(project, data).includes(token));
-        data.section.hidden = !matches;
-        if (matches) {
-            visibleProjects++;
-        }
-    }
-    document.querySelectorAll("[data-sidebar-category]").forEach((category) => {
-        category.hidden = !Array.from(category.querySelectorAll("[data-project-nav]"))
-            .some((section) => !section.hidden);
-    });
-    if (projectFilterEmpty) {
-        projectFilterEmpty.hidden = !tokens.length || visibleProjects > 0;
-    }
-    updateProjectFilterUiState();
-}
-
-function clearProjectFilter() {
-    if (projectFilterInput) {
-        projectFilterInput.value = "";
-    }
-    applyProjectFilter();
-}
-
-function setProjectFilterOpen(open) {
-    if (!projectFilterRoot) {
-        return;
-    }
-    if (!open) {
-        clearProjectFilter();
-    }
-    projectFilterRoot.hidden = !open;
-    updateProjectFilterUiState();
-    if (open) {
-        projectFilterInput?.focus();
-    }
-}
-
 function updateSearchUiState() {
     const hasValue = Boolean(searchInput?.value);
     const hasResults = Boolean(searchResults && !searchResults.hidden);
@@ -1110,7 +1038,6 @@ function loadSidebarMenu() {
             sidebarMenu.dataset.menuLoaded = "true";
             sidebarMenu.setAttribute("aria-busy", "false");
             bindProjectOptions();
-            applyProjectFilter();
         })
         .catch((errorValue) => {
             showSidebarMenuError();
@@ -1587,52 +1514,33 @@ function isProjectRootSection(sectionId, project) {
     return Boolean(sectionId && project && sectionId === project && firstSections[project]);
 }
 
+function projectPageIndexItems(project) {
+    return pageIndexItems[project] || [];
+}
+
+function projectPageIndexItem(project, sectionId) {
+    return projectPageIndexItems(project).find((item) => item.id === sectionId);
+}
+
 function sectionHeadings(project) {
     if (!headingCache.has(project)) {
         const article = projectSections.get(project)?.article || projectArticles.get(project);
-        const headings = Array.from(article?.querySelectorAll("h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]") ?? [])
-            .filter((heading) => heading.id.startsWith(project + "-"))
-            .filter((heading) => numberedHeading(heading));
+        const headings = projectPageIndexItems(project)
+            .map((item) => article?.querySelector("#" + CSS.escape(item.id)))
+            .filter(Boolean);
         headingCache.set(project, headings);
     }
     return headingCache.get(project);
 }
 
-function headingTextWithoutAnchor(heading) {
-    const clone = heading.cloneNode(true);
-    clone.querySelectorAll("a.anchor").forEach((anchor) => anchor.remove());
-    return clone.textContent.replace(/\s+/g, " ").trim();
-}
-
-function numberedHeading(heading) {
-    const text = headingTextWithoutAnchor(heading).replace(/^§\s*/, "");
-    const match = text.match(/^(\d+(?:\.\d+)*)\s+(.+)$/);
-    if (!match) {
-        return undefined;
-    }
-    return {
-        id: heading.id,
-        number: match[1],
-        title: match[2].trim(),
-        depth: match[1].split(".").length - 1,
-        label: match[1] + " " + match[2].trim()
-    };
-}
-
-function numberedHeadingItems(project) {
-    return sectionHeadings(project)
-        .map(numberedHeading)
-        .filter(Boolean);
-}
-
 function pageIndexRoot(project, activeId) {
-    const items = numberedHeadingItems(project);
+    const items = projectPageIndexItems(project);
     if (!items.length) {
         return undefined;
     }
-    const activeItem = items.find((item) => item.id === activeId) || items[0];
+    const activeItem = projectPageIndexItem(project, activeId) || items[0];
     const rootNumber = activeItem.number.split(".")[0];
-    return items.find((item) => item.depth === 0 && item.number === rootNumber) || activeItem;
+    return items.find((item) => item.level === 0 && item.number === rootNumber) || activeItem;
 }
 
 function pageIndexHeadingItems(project, activeId) {
@@ -1640,14 +1548,13 @@ function pageIndexHeadingItems(project, activeId) {
     if (!root) {
         return [];
     }
-    return numberedHeadingItems(project)
-        .filter((item) => item.depth > 0 && item.number.startsWith(root.number + "."))
+    return projectPageIndexItems(project)
+        .filter((item) => item.level > 0 && item.number.startsWith(root.number + "."))
         .map((item) => ({
             id: item.id,
-            level: Math.min(Math.max(item.depth, 1), 3),
+            level: Math.min(Math.max(item.level, 1), 3),
             label: item.label
-        }))
-        .slice(0, 32);
+        }));
 }
 
 function clearPageIndexActiveLink() {
@@ -1706,11 +1613,17 @@ function renderPageIndex(project, activeId) {
 }
 
 function refreshPageIndex(activeId) {
-    if (!pageIndex || pageIndex.hidden || !pageIndexNav) {
+    if (!pageIndex || !pageIndexNav) {
         clearPageIndexActiveLink();
         return;
     }
     const project = document.body.dataset.project;
+    if (pageIndex.hidden) {
+        if (activeId && project) {
+            renderPageIndex(project, activeId);
+        }
+        return;
+    }
     const root = pageIndexRoot(project, activeId);
     if (root?.id && root.id !== activePageIndexRootId) {
         renderPageIndex(project, activeId);
@@ -2189,7 +2102,7 @@ function setProject(project, options) {
     if (settings.updateHash && (settings.forceHash || !projectFromHash())) {
         history.replaceState(null, "", "#" + targetSection);
     }
-    renderPageIndex(project);
+    renderPageIndex(project, activeTargetSection);
     refreshActiveLink(settings.scrollContent ? activeTargetSection : undefined);
     if (settings.scrollSubmenu && project !== previousProject) {
         scrollProjectSubmenu(next?.section);
@@ -2202,7 +2115,7 @@ function setProject(project, options) {
             if (document.body.dataset.project !== project) {
                 return;
             }
-            renderPageIndex(project);
+            renderPageIndex(project, activeTargetSection);
             if (settings.scrollContent) {
                 const scrollOptions = {
                     block: settings.scrollBlock,
@@ -2448,21 +2361,6 @@ sidebarCollapse?.addEventListener("click", () => {
     }
 });
 
-projectFilterToggle?.addEventListener("click", () => {
-    setProjectFilterOpen(projectFilterRoot?.hidden ?? true);
-});
-projectFilterInput?.addEventListener("input", applyProjectFilter);
-projectFilterInput?.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-        event.preventDefault();
-        setProjectFilterOpen(false);
-    }
-});
-projectFilterClear?.addEventListener("click", () => {
-    clearProjectFilter();
-    projectFilterInput?.focus();
-});
-
 themeSwitcher?.addEventListener("click", () => switchTheme());
 
 searchTrigger?.addEventListener("click", () => {
@@ -2583,7 +2481,6 @@ function initializeRoute() {
     if (!document.body.classList.contains("overview-active")) {
         queueScrollSpy();
     }
-    updateProjectFilterUiState();
 }
 
 loadSidebarMenu().catch(() => {

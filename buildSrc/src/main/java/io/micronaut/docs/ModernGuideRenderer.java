@@ -185,8 +185,7 @@ final class ModernGuideRenderer {
         if (!sourceFile.startsWith(guideSource) || !Files.isRegularFile(sourceFile)) {
             throw new IOException("Missing guide source file for " + project.displayName() + ": " + sourceFile);
         }
-        content.append(sectionHeading(node, level, sectionNumber))
-            .append(contributeButton(node.getFile()));
+        content.append(sectionHeading(node, level, sectionNumber, node.getFile()));
 
         context.set("sourceFile", sourceFile.toFile());
         content.append(renderAsciiDoc(engine, Files.readString(sourceFile, StandardCharsets.UTF_8), attributes, baseDir)).append('\n');
@@ -376,26 +375,30 @@ final class ModernGuideRenderer {
         return false;
     }
 
-    private static String sectionHeading(UserGuideNode node, int level, String sectionNumber) {
+    private String sectionHeading(UserGuideNode node, int level, String sectionNumber, String sourcePath) {
         int headingLevel = level == 0 ? 1 : 2;
         String id = attribute(node.getName());
-        return "<h" + headingLevel + " id=\"" + id + "\"><a class=\"anchor\" href=\"#" + id + "\"></a>"
-            + html(sectionNumber) + " " + html(node.getTitle()) + "</h" + headingLevel + ">\n\n";
-    }
-
-    private String contributeButton(String sourcePath) {
         return """
-            <div class="contribute-btn">
-                <button type="button" class="btn btn-default" onclick="window.location.href=&quot;%s/guide/%s&quot;">
+            <div class="guide-section-heading">
+                <h%s id="%s"><a class="anchor" href="#%s"></a>%s %s</h%s>
+                <a class="contribute-btn" href="%s/guide/%s" title="Improve this doc" aria-label="Improve this doc">
                     <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
                         <path d="M12 20h9"></path>
                         <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
                     </svg>
-                    <span>Improve this doc</span>
-                </button>
+                </a>
             </div>
 
-            """.formatted(attribute(sourceDocsEditUrl()), attribute(sourcePath));
+            """.formatted(
+            headingLevel,
+            id,
+            id,
+            html(sectionNumber),
+            html(node.getTitle()),
+            headingLevel,
+            attribute(sourceDocsEditUrl()),
+            attribute(sourcePath)
+        );
     }
 
     private String sourceDocsEditUrl() {

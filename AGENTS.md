@@ -302,9 +302,9 @@ Sidebar rules:
 
 - Categories group projects; category counts stay hidden. Keep `Most Popular` first because the first matching category wins.
 - Project rows are first-level expandable items with icon, display name, and optional version. The project's TOC is nested under the project row and should not appear as a separate global tree.
-- Text must remain readable in expanded, collapsed, filtered, and mobile states. Do not truncate project or TOC labels in a way that hides meaning; allow wrapping where needed.
-- The project filter is a compact sidebar affordance beside `Projects`. Keep it keyboard usable, with clear empty and clear-button states.
+- Text must remain readable in expanded, collapsed, and mobile states. Do not truncate project or TOC labels in a way that hides meaning; allow wrapping where needed.
 - Selecting a project should reveal the project title and document metadata actions. On mobile, outside clicks after selection should close the sidebar.
+- Section edit links use an icon-only `contribute-btn` that appears on heading hover or keyboard focus. Keep the text in `title` and `aria-label`, not visible heading chrome.
 
 Top bar rules:
 
@@ -342,7 +342,7 @@ Current designer evaluation:
 - The overview page works well when categories contain multiple cards. In small fixture builds, one-card categories create a narrow column with too much empty right-side space. If partial builds remain common, prefer a bounded overview content width, denser category grouping, or a layout that lets singleton categories sit in a two-column category/card composition.
 - Overview cards have the right shadcn-adjacent vocabulary: 8px radius, quiet border, small icon tile, compact footer actions, and visible version metadata. The body copy should stay near 30 to 40 words; longer descriptions make cards feel like excerpts rather than navigation.
 - The sidebar is visually calm and readable. Project rows have enough height for touch and version context, the arrow aligns with the title, and mobile off-canvas behavior feels natural. Keep the sidebar width around the current 384px because generated project names and TOC labels need room.
-- The sidebar should remain the most trustworthy navigation inventory. In any generated fixture or partial build, verify that the overview card set and lazy sidebar menu expose the same projects unless a filter is explicitly active.
+- The sidebar should remain the most trustworthy navigation inventory. In any generated fixture or partial build, verify that the overview card set and lazy sidebar menu expose the same projects.
 - The top bar is appropriately utilitarian. The version belongs in the breadcrumb, the search belongs on the right, and the theme toggle is correctly icon-only. Avoid adding badges or project actions to the top bar; project metadata belongs in `.document-meta`.
 - Document metadata badges are useful but should stay secondary. On wide desktop they can sit on the right of the project title area; below 1280px they should flow before content, as they do now. Do not let metadata create extra title top margin or horizontal overflow.
 - Code snippets now fit the gray documentation palette better than blue-gray or IDE-style themes. Normal code blocks and dependency snippets should stay close in value; dependency blocks can be a slight elevation, not a separate color family. The tab separator should remain almost invisible.
@@ -402,7 +402,7 @@ Search must stay fast and static:
 - The sidebar shows project groups such as `Most Popular` and other curated categories.
 - Category counts are intentionally hidden.
 - Projects are first-level sidebar items. Expanding a project shows its TOC.
-- The project list can be filtered through the search icon next to `Projects`.
+- The left sidebar shows only top-level guide sections. Numbered subsections are exposed through the right-side `In this section` rail generated from the same `toc.yml` model, not by parsing rendered heading text.
 - Selecting a project should scroll enough that the project title and top action buttons are visible.
 - On mobile, clicking outside an open sidebar after selecting a project should close the sidebar.
 - Keep sidebar text readable; do not let labels be cut off.

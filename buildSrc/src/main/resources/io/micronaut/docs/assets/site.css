@@ -161,17 +161,9 @@ body.dark-mode .sidebar .sidebar-category-heading,
 body.dark-mode .sidebar .project-icon,
 body.dark-mode .sidebar .project-section > summary,
 body.dark-mode .sidebar .project-section > summary small,
-body.dark-mode .sidebar .project-filter input,
-body.dark-mode .sidebar .project-filter-toggle,
-body.dark-mode .sidebar .project-filter-clear,
 body.dark-mode .sidebar .toc-number,
 body.dark-mode .sidebar .toc a {
     color: #ffffff !important;
-}
-
-body.dark-mode .sidebar .project-filter-field {
-    background: #000000;
-    border-color: #444444;
 }
 
 .sidebar-header {
@@ -268,92 +260,6 @@ body.dark-mode .sidebar-logo-dark {
     font-size: 0.72rem;
     font-weight: 400;
     text-align: left;
-}
-
-.project-filter-toggle,
-.project-filter-clear {
-    display: inline-grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-}
-
-.project-filter-toggle:hover,
-.project-filter-toggle.active,
-.project-filter-clear:hover {
-    background: #f4f4f5;
-    color: var(--text);
-}
-
-.project-filter-toggle:focus-visible,
-.project-filter-clear:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent) 44%, transparent);
-    outline-offset: 2px;
-}
-
-.project-filter {
-    display: grid;
-    gap: 6px;
-    padding: 0 4px 8px 8px;
-}
-
-.project-filter[hidden] {
-    display: none;
-}
-
-.project-filter-field {
-    display: grid;
-    grid-template-columns: 16px minmax(0, 1fr) 28px;
-    align-items: center;
-    min-height: 34px;
-    padding: 0 3px 0 9px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--bg);
-    color: var(--muted);
-    transition: background-color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
-}
-
-.project-filter-field:focus-within,
-.project-filter.has-value .project-filter-field {
-    border-color: rgba(0, 166, 118, 0.55);
-    box-shadow: 0 0 0 3px rgba(0, 166, 118, 0.12);
-}
-
-.project-filter input {
-    min-width: 0;
-    height: 30px;
-    border: 0;
-    outline: 0;
-    background: transparent;
-    color: var(--text);
-    font: inherit;
-    font-size: 0.84rem;
-}
-
-.project-filter input::-webkit-search-cancel-button {
-    appearance: none;
-}
-
-.project-filter input::placeholder {
-    color: var(--muted);
-}
-
-.project-filter-clear[hidden],
-.project-filter-empty[hidden] {
-    display: none;
-}
-
-.project-filter-empty {
-    padding: 6px 8px 2px;
-    color: var(--muted);
-    font-size: 0.78rem;
 }
 
 .sidebar-projects {
@@ -483,8 +389,6 @@ body.sidebar-collapsed .sidebar-brand {
 
 body.sidebar-collapsed .sidebar-group-label,
 body.sidebar-collapsed .sidebar-category-heading,
-body.sidebar-collapsed .project-filter,
-body.sidebar-collapsed .project-filter-toggle,
 body.sidebar-collapsed .project-title,
 body.sidebar-collapsed .project-section > summary small,
 body.sidebar-collapsed .project-section > summary::before,
@@ -1010,9 +914,6 @@ body.search-open {
 body.dark-mode .sidebar-brand:hover,
 body.dark-mode .sidebar-collapse:hover,
 body.dark-mode .sidebar-toggle:hover,
-body.dark-mode .project-filter-toggle:hover,
-body.dark-mode .project-filter-toggle.active,
-body.dark-mode .project-filter-clear:hover,
 body.dark-mode .site-search-clear:hover,
 body.dark-mode .site-search-scope:hover,
 body.dark-mode .site-search-result:hover,
@@ -1989,19 +1890,6 @@ body.dark-mode .theme-icon-sun {
     }
 }
 
-@media (max-width: 767px) {
-    .guide-document .contribute-btn {
-        position: static;
-        float: none;
-        margin-bottom: 7px;
-    }
-
-    .guide-document .contribute-btn .btn {
-        padding: 4px 9px;
-        font-size: 11px;
-    }
-}
-
 .guide-document :where(h1, h2, h3, h4, h5, h6) > a.anchor {
     position: absolute;
     z-index: 1;
@@ -2502,39 +2390,43 @@ body.dark-mode .theme-icon-sun {
     padding: 0.25em 0;
 }
 
-.guide-document .contribute-btn {
+.guide-document .guide-section-heading {
     position: relative;
+}
+
+.guide-document .guide-section-heading > :where(h1, h2, h3, h4, h5, h6) {
+    padding-right: 36px;
+}
+
+.guide-document .contribute-btn {
+    position: absolute;
+    top: 50%;
     right: 0;
-    bottom: 40px;
-    float: right;
-    margin: 0;
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--muted);
+    opacity: 0;
+    text-decoration: none !important;
+    transform: translateY(-50%);
+    transition: opacity 0.14s ease, color 0.14s ease, background-color 0.14s ease, border-color 0.14s ease;
 }
 
-.guide-document .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 0;
-    padding: 6px 12px;
-    border: 1px solid;
-    border-radius: 4px;
-    background-image: none;
-    cursor: pointer;
-    color: #333333;
-    font-family: var(--shell-font);
-    font-size: 14px;
-    font-weight: 400;
-    line-height: 1.42857;
-    text-align: center;
-    vertical-align: middle;
-    white-space: nowrap;
-    user-select: none;
+.guide-document .guide-section-heading:hover .contribute-btn,
+.guide-document .guide-section-heading:focus-within .contribute-btn {
+    opacity: 1;
 }
 
-.guide-document .btn-default {
-    border-color: #cccccc;
-    background-color: #ffffff;
-    color: #333333;
+.guide-document .contribute-btn:hover,
+.guide-document .contribute-btn:focus-visible {
+    border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+    background: var(--surface-strong);
+    color: var(--text);
+    outline: none;
 }
 
 .guide-document .button-icon {
@@ -3123,12 +3015,6 @@ body.dark-mode .guide-document .sect1 + .sect1 {
     border-top-color: #222222;
 }
 
-body.dark-mode .guide-document .btn-default {
-    border-color: #444444;
-    background-color: #484848;
-    color: #dddddd;
-}
-
 body.dark-mode .guide-document .conum[data-value] {
     background-color: rgba(255, 255, 255, 0.8) !important;
     color: #000000 !important;
@@ -3528,18 +3414,9 @@ body.dark-mode .reference-switch[aria-selected="true"] {
 
     body.sidebar-collapsed .sidebar-group-label,
     body.sidebar-collapsed .sidebar-category-heading,
-    body.sidebar-collapsed .project-filter-toggle,
     body.sidebar-collapsed .project-title,
     body.sidebar-collapsed .project-section > summary small {
         display: block;
-    }
-
-    body.sidebar-collapsed .project-filter-toggle {
-        display: inline-grid;
-    }
-
-    body.sidebar-collapsed .project-filter:not([hidden]) {
-        display: grid;
     }
 
     body.sidebar-collapsed .project-section > summary::before {

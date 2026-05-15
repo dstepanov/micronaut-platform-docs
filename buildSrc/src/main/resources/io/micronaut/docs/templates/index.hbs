@@ -21,19 +21,6 @@
                 <section class="sidebar-group">
                     <div class="sidebar-group-heading">
                         <span class="sidebar-group-label">Projects</span>
-                        <button class="project-filter-toggle" type="button" aria-controls="project-filter" aria-expanded="false" title="Filter projects" aria-label="Filter projects" data-project-filter-toggle>
-                            {{{icons.search}}}
-                        </button>
-                    </div>
-                    <div id="project-filter" class="project-filter" data-project-filter hidden>
-                        <div class="project-filter-field">
-                            {{{icons.search}}}
-                            <input id="project-filter-input" type="search" placeholder="Filter projects" aria-label="Filter projects" autocomplete="off" spellcheck="false" data-project-filter-input>
-                            <button class="project-filter-clear" type="button" title="Clear project filter" aria-label="Clear project filter" data-project-filter-clear hidden>
-                                {{{icons.x}}}
-                            </button>
-                        </div>
-                        <div class="project-filter-empty" data-project-filter-empty hidden>No projects found</div>
                     </div>
                     <div class="sidebar-projects" data-sidebar-menu data-menu-url="{{sidebarMenuPath}}" data-menu-script-url="{{sidebarMenuScriptPath}}" aria-busy="true">
                         <div class="sidebar-menu-loading" data-sidebar-menu-loading aria-label="Loading projects">
@@ -202,10 +189,10 @@
             </article>
 {{/each}}
             </main>
-            <aside class="page-index" aria-label="On this page" data-page-index hidden>
+            <aside class="page-index" aria-label="In this section" data-page-index hidden>
                 <div class="page-index-inner">
                     <div class="page-index-header">
-                        <span>On this page</span>
+                        <span>In this section</span>
                         <a class="page-index-top" href="#content" title="Back to top" aria-label="Back to top" data-page-index-top>
                             {{{icons.arrowUp}}}
                         </a>
