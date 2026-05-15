@@ -24,10 +24,12 @@ const projectFilterInput = document.querySelector("[data-project-filter-input]")
 const projectFilterClear = document.querySelector("[data-project-filter-clear]");
 const projectFilterEmpty = document.querySelector("[data-project-filter-empty]");
 const searchRoot = document.querySelector("[data-search]");
+const searchTrigger = document.querySelector("[data-search-trigger]");
 const searchInput = document.querySelector("[data-search-input]");
 const searchClear = document.querySelector("[data-search-clear]");
 const searchResults = document.querySelector("[data-search-results]");
 const searchDialog = document.querySelector("[data-search-dialog]");
+const searchBackdrop = document.querySelector("[data-search-backdrop]");
 const searchScopeButtons = Array.from(document.querySelectorAll("[data-search-scope]"));
 const referenceOverlay = document.querySelector("[data-reference-overlay]");
 const referencePanel = document.querySelector("[data-reference-panel]");
@@ -597,6 +599,7 @@ function searchCommandIcon(kind) {
     const normalizedKind = String(kind || "").toLowerCase();
     const icons = {
         api: "<path d=\"m8 3-4 4 4 4\"></path><path d=\"m16 3 4 4-4 4\"></path><path d=\"m14 21 4-10\"></path><path d=\"m6 21 4-10\"></path>",
+        "api-type": "<path d=\"M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h2\"></path><path d=\"M16 3h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2\"></path><path d=\"m10 9-3 3 3 3\"></path><path d=\"m14 9 3 3-3 3\"></path>",
         configuration: "<path d=\"M4 21v-7\"></path><path d=\"M4 10V3\"></path><path d=\"M12 21v-9\"></path><path d=\"M12 8V3\"></path><path d=\"M20 21v-5\"></path><path d=\"M20 12V3\"></path><path d=\"M2 14h4\"></path><path d=\"M10 8h4\"></path><path d=\"M18 16h4\"></path>",
         "configuration-reference": "<path d=\"M4 21v-7\"></path><path d=\"M4 10V3\"></path><path d=\"M12 21v-9\"></path><path d=\"M12 8V3\"></path><path d=\"M20 21v-5\"></path><path d=\"M20 12V3\"></path><path d=\"M2 14h4\"></path><path d=\"M10 8h4\"></path><path d=\"M18 16h4\"></path>",
         content: "<path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"></path><path d=\"M14 2v6h6\"></path><path d=\"M16 13H8\"></path><path d=\"M16 17H8\"></path><path d=\"M10 9H8\"></path>",
@@ -613,43 +616,49 @@ function searchKindLabel(item) {
         return "Project";
     }
     if (item.kind === "configuration") {
-        return "Configuration property";
+        return "Property";
     }
     if (item.kind === "configuration-reference") {
         return "Configuration reference";
     }
+    if (item.kind === "api-type") {
+        return "Class";
+    }
     if (item.kind === "api") {
-        return "API / Javadoc";
+        return "API reference";
     }
     if (item.kind === "repository") {
         return "Repository";
     }
     if (item.kind === "content") {
-        return "Documentation match";
+        return "Documentation";
     }
-    return "Documentation section";
+    return "Section";
 }
 
 function searchResultDetail(item) {
     if (item.kind === "project") {
-        return "Project documentation";
+        return "Open documentation";
     }
     if (item.kind === "configuration") {
-        return "Configuration property";
+        return item.detail || "Configuration property";
     }
     if (item.kind === "configuration-reference") {
-        return "Open configuration reference";
+        return item.detail || "Open configuration reference";
+    }
+    if (item.kind === "api-type") {
+        return item.detail ? "Class in " + item.detail : "Open API class";
     }
     if (item.kind === "api") {
-        return "Open API and Javadoc reference";
+        return item.detail || "Open API and Javadoc reference";
     }
     if (item.kind === "repository") {
-        return "Open GitHub repository";
+        return item.detail || "Open GitHub repository";
     }
     if (item.kind === "content") {
-        return "Documentation match";
+        return item.detail || "Documentation match";
     }
-    return "Documentation section";
+    return item.detail || "Documentation section";
 }
 
 function searchScopeMatchesItem(item) {
@@ -663,7 +672,7 @@ function searchScopeMatchesItem(item) {
         return item.kind === "configuration" || item.kind === "configuration-reference";
     }
     if (searchScope === "api") {
-        return item.kind === "api";
+        return item.kind === "api" || item.kind === "api-type";
     }
     if (searchScope === "repositories") {
         return item.kind === "repository";
@@ -675,7 +684,13 @@ function setSearchOpen(open) {
     if (searchDialog) {
         searchDialog.hidden = !open;
     }
+    if (searchBackdrop) {
+        searchBackdrop.hidden = !open;
+    }
     document.body.classList.toggle("search-open", open);
+    if (searchTrigger) {
+        searchTrigger.setAttribute("aria-expanded", String(open));
+    }
     if (searchRoot) {
         searchRoot.classList.toggle("is-open", open);
     }
@@ -686,6 +701,27 @@ function setSearchOpen(open) {
         }
     }
     updateSearchUiState();
+}
+
+function openSearchDialog(selectValue = false) {
+    setSearchOpen(true);
+    if ((searchInput?.value || "").trim().length >= 2) {
+        queueSearch();
+    } else {
+        renderSearchPrompt();
+    }
+    window.requestAnimationFrame(() => {
+        searchInput?.focus();
+        if (selectValue) {
+            searchInput?.select();
+        }
+    });
+}
+
+function searchContainsTarget(target) {
+    return Boolean((searchRoot && searchRoot.contains(target))
+        || (searchDialog && searchDialog.contains(target))
+        || (searchBackdrop && searchBackdrop.contains(target)));
 }
 
 function setSearchScope(scope) {
@@ -699,7 +735,7 @@ function setSearchScope(scope) {
     if ((searchInput?.value || "").trim().length >= 2) {
         queueSearch();
     } else {
-        clearSearchResults();
+        renderSearchPrompt();
     }
     searchInput?.focus();
 }
@@ -712,6 +748,15 @@ function projectTitleForSearch(project) {
     return referenceButton?.dataset.referenceProjectName
         || card?.querySelector("h3")?.textContent?.trim()
         || project;
+}
+
+function repositoryDisplayPath(url) {
+    try {
+        const parsed = new URL(url, window.location.href);
+        return parsed.hostname.replace(/^www\./, "") + parsed.pathname.replace(/\/$/, "");
+    } catch (error) {
+        return String(url || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+    }
 }
 
 function buildCommandSearchItems() {
@@ -733,7 +778,7 @@ function buildCommandSearchItems() {
             project,
             projectTitle,
             title,
-            href: "#" + (firstSections[project] || project),
+            href: "#" + project,
             detail,
             referenceKind,
             referenceUrl: url,
@@ -753,13 +798,14 @@ function buildCommandSearchItems() {
             return;
         }
         const version = card.querySelector(".project-card-version")?.textContent?.trim() || "";
+        const repositoryPath = repositoryDisplayPath(repositoryUrl);
         items.push({
             kind: "repository",
             project,
             projectTitle,
-            title: projectTitle + " repository",
+            title: projectTitle,
             href: repositoryUrl,
-            detail: version ? "GitHub repository, " + version : "GitHub repository",
+            detail: version ? repositoryPath + " - " + version : repositoryPath,
             externalUrl: repositoryUrl,
             searchText: projectTitle + " " + project + " github repository source module metadata " + version + " " + repositoryUrl
         });
@@ -861,7 +907,9 @@ function updateSearchUiState() {
     const hasValue = Boolean(searchInput?.value);
     const hasResults = Boolean(searchResults && !searchResults.hidden);
     const open = Boolean(searchDialog && !searchDialog.hidden);
-    const active = Boolean(searchRoot && searchRoot.contains(document.activeElement)) || open;
+    const active = Boolean(searchRoot && searchRoot.contains(document.activeElement))
+        || Boolean(searchDialog && searchDialog.contains(document.activeElement))
+        || open;
     if (searchClear) {
         searchClear.hidden = !hasValue;
         searchClear.setAttribute("aria-hidden", String(!hasValue));
@@ -869,6 +917,9 @@ function updateSearchUiState() {
     }
     if (searchInput) {
         searchInput.setAttribute("aria-expanded", String(open));
+    }
+    if (searchTrigger) {
+        searchTrigger.setAttribute("aria-expanded", String(open));
     }
     if (searchRoot) {
         searchRoot.classList.toggle("has-value", hasValue);
@@ -893,6 +944,11 @@ function searchDisplayTitle(projectTitle, title) {
     return normalizedTitle;
 }
 
+function projectNameAlias(item) {
+    const title = String(item.projectTitle || item.title || "");
+    return normalizeSearchText(title.replace(/^Micronaut\s+/i, ""));
+}
+
 function addSearchIndexTerms(index, itemId, value) {
     const tokens = searchTokens(value);
     const allTerms = new Set();
@@ -915,14 +971,13 @@ function buildSidebarSearchIndex() {
     const index = { items: [], terms: {} };
     for (const [project, data] of projectSections.entries()) {
         const projectTitle = data.summary.querySelector(".project-title")?.textContent?.trim() || project;
-        const firstSection = firstSections[project] || project;
         const projectItem = {
             kind: "project",
             project,
             projectTitle,
             title: projectTitle,
-            href: "#" + firstSection,
-            detail: "Project"
+            href: "#" + project,
+            detail: "Open documentation"
         };
         index.items.push(projectItem);
         addSearchIndexTerms(index, index.items.length - 1, project + " " + projectTitle);
@@ -1200,6 +1255,33 @@ function prefetchProjectDocument(project) {
     });
 }
 
+function renderSearchPrompt() {
+    if (!searchResults) {
+        return;
+    }
+    const typeBadges = searchScope === "all"
+        ? `
+            <div class="site-search-prompt-badges" aria-label="Additional result types in All">
+                <span class="site-search-prompt-badge">Class</span>
+                <span class="site-search-prompt-badge">Property</span>
+            </div>
+        `
+        : "";
+    searchResults.hidden = false;
+    searchResults.innerHTML = `
+        <div class="site-search-prompt">
+            <div class="site-search-prompt-title">
+                <strong>Search the platform docs</strong>
+                <span>Find projects, guide sections, API classes, configuration properties, and GitHub repositories from the same command surface.</span>
+            </div>
+            ${typeBadges}
+        </div>
+    `;
+    searchActiveIndex = -1;
+    searchInput?.removeAttribute("aria-activedescendant");
+    updateSearchUiState();
+}
+
 function clearSearchResults() {
     if (searchResults) {
         searchResults.hidden = true;
@@ -1237,6 +1319,8 @@ function setSearchActive(index) {
 function scoreSearchResult(item, tokens, queryText, matchedTokenCount) {
     const title = normalizeSearchText(item.title);
     const project = normalizeSearchText(item.projectTitle);
+    const projectAlias = projectNameAlias(item);
+    const projectSlug = normalizeSearchText(item.project);
     const detail = normalizeSearchText(item.detail);
     let score = matchedTokenCount * 100;
     if (title === queryText) {
@@ -1253,6 +1337,16 @@ function scoreSearchResult(item, tokens, queryText, matchedTokenCount) {
     } else if (project.includes(queryText)) {
         score += 20;
     }
+    if (projectAlias && projectAlias === queryText) {
+        score += item.kind === "project" ? 160 : 90;
+    } else if (projectAlias && projectAlias.startsWith(queryText)) {
+        score += item.kind === "project" ? 96 : 52;
+    } else if (projectAlias && projectAlias.includes(queryText)) {
+        score += item.kind === "project" ? 44 : 20;
+    }
+    if (projectSlug && projectSlug === queryText && item.kind === "project") {
+        score += 120;
+    }
     if (detail.includes(queryText)) {
         score += 8;
     }
@@ -1260,6 +1354,8 @@ function scoreSearchResult(item, tokens, queryText, matchedTokenCount) {
         score += 72;
     } else if (item.kind === "configuration") {
         score += 24;
+    } else if (item.kind === "api-type") {
+        score += 36;
     } else if (item.kind === "configuration-reference" || item.kind === "api") {
         score += 28;
     } else if (item.kind === "repository") {
@@ -1269,8 +1365,45 @@ function scoreSearchResult(item, tokens, queryText, matchedTokenCount) {
         if (title.startsWith(token)) {
             score += 10;
         }
+        if (projectAlias && projectAlias === token && item.kind === "project") {
+            score += 28;
+        }
     }
     return score;
+}
+
+function apiTypeSearchText(item) {
+    if (!item.__apiSearchText) {
+        const source = [item.title, item.detail].join(" ");
+        const compact = source.toLowerCase().replace(/[^a-z0-9]+/g, "");
+        Object.defineProperty(item, "__apiSearchText", {
+            value: normalizeSearchText(source) + " " + compact,
+            enumerable: false
+        });
+    }
+    return item.__apiSearchText;
+}
+
+function searchApiTypeResults(index, tokens, queryText) {
+    if (searchScope !== "all" && searchScope !== "api") {
+        return [];
+    }
+    return index.items
+        .map((item) => {
+            if (item.kind !== "api-type") {
+                return undefined;
+            }
+            const searchText = apiTypeSearchText(item);
+            const matchedTokenCount = tokens.filter((token) => searchText.includes(token)).length;
+            if (matchedTokenCount !== tokens.length) {
+                return undefined;
+            }
+            return {
+                item,
+                score: scoreSearchResult(item, tokens, queryText, matchedTokenCount)
+            };
+        })
+        .filter(Boolean);
 }
 
 function findSearchResults(index, query) {
@@ -1299,6 +1432,7 @@ function findSearchResults(index, query) {
                 score: scoreSearchResult(item, tokens, queryText, matchedTokenCount)
             };
         })
+        .concat(searchApiTypeResults(index, tokens, queryText))
         .sort((left, right) => right.score - left.score || left.item.title.localeCompare(right.item.title))
         .map((result) => result.item)
         .filter(searchScopeMatchesItem)
@@ -1318,7 +1452,7 @@ function renderSearchResults(results, query) {
     searchActiveIndex = -1;
     searchInput?.removeAttribute("aria-activedescendant");
     if (!results.length) {
-        searchResults.innerHTML = "<div class=\"site-search-empty\">No results</div>";
+        searchResults.innerHTML = `<div class="site-search-empty">No results for <strong>${escapeHtml(query.trim())}</strong></div>`;
         updateSearchUiState();
         return;
     }
@@ -1327,24 +1461,33 @@ function renderSearchResults(results, query) {
         const isConfiguration = item.kind === "configuration";
         const isExternal = Boolean(item.externalUrl);
         const projectAttribute = isProject ? " data-search-project-link" : "";
+        const referenceKind = item.kind === "api-type" ? "api" : (item.referenceKind || item.kind || "configuration");
+        const referenceTitle = item.kind === "api-type" ? item.title : "";
         const referenceAttribute = item.referenceUrl
-            ? ` data-search-reference-url="${escapeHtml(item.referenceUrl)}" data-search-reference-kind="${escapeHtml(item.referenceKind || item.kind || "configuration")}" data-search-project="${escapeHtml(item.project)}"`
+            ? ` data-search-reference-url="${escapeHtml(item.referenceUrl)}" data-search-reference-kind="${escapeHtml(referenceKind)}" data-search-reference-title="${escapeHtml(referenceTitle)}" data-search-project="${escapeHtml(item.project)}"`
             : "";
         const externalAttribute = isExternal
             ? ` data-search-external-url="${escapeHtml(item.externalUrl)}" target="_blank" rel="noopener"`
             : "";
         const resultLabel = searchKindLabel(item);
         const resultDetail = searchResultDetail(item);
-        const resultTitle = isProject || isConfiguration ? item.title : searchDisplayTitle(item.projectTitle, item.title);
-        const projectLabel = isProject ? item.detail || "Project documentation" : item.projectTitle;
+        const resultTitle = isProject || isConfiguration || item.kind === "api-type" ? item.title : searchDisplayTitle(item.projectTitle, item.title);
+        const projectLabel = isProject ? "" : (item.kind === "repository" ? "GitHub repository" : item.projectTitle);
+        const resultKindBadge = searchScope === "all" && (item.kind === "api-type" || item.kind === "configuration")
+            ? `<span class="site-search-result-kind">${escapeHtml(resultLabel)}</span>`
+            : "";
+        const resultMeta = resultKindBadge || projectLabel
+            ? `
+                    <span class="site-search-result-meta">
+                        ${resultKindBadge}
+                        ${projectLabel ? `<span class="site-search-result-project">${escapeHtml(projectLabel)}</span>` : ""}
+                    </span>`
+            : "";
         return `
             <a id="site-search-result-${resultIndex}" class="site-search-result" href="${escapeHtml(item.href)}" data-search-result data-search-kind="${escapeHtml(item.kind || "")}"${projectAttribute}${referenceAttribute}${externalAttribute} role="option" aria-selected="false">
                 ${searchCommandIcon(item.kind)}
                 <span class="site-search-result-body">
-                    <span class="site-search-result-meta">
-                        <span class="site-search-result-kind">${escapeHtml(resultLabel)}</span>
-                        <span class="site-search-result-project">${escapeHtml(projectLabel || "")}</span>
-                    </span>
+                    ${resultMeta}
                     <strong>${escapeHtml(resultTitle)}</strong>
                     <small>${escapeHtml(resultDetail)}</small>
                 </span>
@@ -1359,7 +1502,7 @@ function runSearch() {
     setSearchOpen(true);
     updateSearchUiState();
     if (query.trim().length < 2) {
-        clearSearchResults();
+        renderSearchPrompt();
         return;
     }
     if (searchResults) {
@@ -1427,7 +1570,14 @@ function projectFromHash() {
 }
 
 function projectFromSectionId(sectionId) {
+    if (firstSections[sectionId]) {
+        return sectionId;
+    }
     return projectSlugsByLength.find((project) => sectionId.startsWith(project + "-"));
+}
+
+function isProjectRootSection(sectionId, project) {
+    return Boolean(sectionId && project && sectionId === project && firstSections[project]);
 }
 
 function sectionHeadings(project) {
@@ -1882,10 +2032,12 @@ function setProject(project, options) {
 
     const firstSection = firstSections[project];
     const targetSection = settings.sectionId || firstSection;
+    const projectRootTarget = isProjectRootSection(targetSection, project);
+    const activeTargetSection = projectRootTarget ? firstSection : targetSection;
     if (settings.updateHash && (settings.forceHash || !projectFromHash())) {
         history.replaceState(null, "", "#" + targetSection);
     }
-    refreshActiveLink(settings.scrollContent ? targetSection : undefined);
+    refreshActiveLink(settings.scrollContent ? activeTargetSection : undefined);
     if (settings.scrollSubmenu && project !== previousProject) {
         scrollProjectSubmenu(next?.section);
     }
@@ -1902,10 +2054,10 @@ function setProject(project, options) {
                     block: settings.scrollBlock,
                     focus: settings.focusTarget
                 };
-                if (settings.scrollProjectTitle) {
-                    scrollToProjectTitle(project, targetSection, scrollOptions);
+                if (settings.scrollProjectTitle || projectRootTarget) {
+                    scrollToProjectTitle(project, activeTargetSection, scrollOptions);
                 } else {
-                    scrollToSection(targetSection, scrollOptions);
+                    scrollToSection(activeTargetSection, scrollOptions);
                 }
             } else {
                 queueScrollSpy();
@@ -2000,6 +2152,12 @@ document.addEventListener("click", (event) => {
         copyModernCodeBlock(copyButton);
         return;
     }
+    if (event.target.closest("[data-search-backdrop]")) {
+        event.preventDefault();
+        closeSearchResults();
+        searchTrigger?.focus();
+        return;
+    }
     const searchScopeButton = event.target.closest("[data-search-scope]");
     if (searchScopeButton) {
         event.preventDefault();
@@ -2037,14 +2195,14 @@ document.addEventListener("click", (event) => {
             if (referenceButton) {
                 openReference(referenceButton, {
                     url: searchResult.dataset.searchReferenceUrl,
-                    title: referenceButton.dataset.referenceTitle,
+                    title: searchResult.dataset.searchReferenceTitle || referenceButton.dataset.referenceTitle,
                     projectName: referenceButton.dataset.referenceProjectName
                 });
             }
             closeSidebar();
             return;
         }
-    } else if (searchRoot && !searchRoot.contains(event.target)) {
+    } else if (!searchContainsTarget(event.target)) {
         closeSearchResults();
     }
     const referenceSwitch = event.target.closest("[data-reference-switch-kind]");
@@ -2096,14 +2254,15 @@ document.addEventListener("click", (event) => {
     if (targetProject) {
         event.preventDefault();
         const fromSearch = Boolean(hashLink.closest("[data-search-result]"));
+        const projectRootTarget = isProjectRootSection(targetId, targetProject);
         setProject(targetProject, {
             sectionId: targetId,
             updateHash: true,
             forceHash: true,
             scrollContent: true,
-            scrollBlock: fromSearch ? "center" : "start",
-            focusTarget: fromSearch,
-            scrollProjectTitle: Boolean(hashLink.closest("[data-overview-doc-link], [data-search-project-link]")),
+            scrollBlock: fromSearch && !projectRootTarget ? "center" : "start",
+            focusTarget: fromSearch && !projectRootTarget,
+            scrollProjectTitle: projectRootTarget || Boolean(hashLink.closest("[data-overview-doc-link], [data-search-project-link]")),
             scrollSubmenu: targetProject !== document.body.dataset.project
         });
         closeSidebar();
@@ -2146,13 +2305,16 @@ projectFilterClear?.addEventListener("click", () => {
 
 themeSwitcher?.addEventListener("click", () => switchTheme());
 
+searchTrigger?.addEventListener("click", () => {
+    openSearchDialog(true);
+});
 searchInput?.addEventListener("input", queueSearch);
 searchInput?.addEventListener("focus", () => {
     setSearchOpen(true);
     if (searchInput.value.trim().length >= 2) {
         queueSearch();
     } else {
-        clearSearchResults();
+        renderSearchPrompt();
     }
 });
 searchRoot?.addEventListener("focusin", updateSearchUiState);
@@ -2163,6 +2325,7 @@ searchInput?.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
         closeSearchResults();
         searchInput.blur();
+        searchTrigger?.focus();
         return;
     }
     if (event.key === "ArrowDown") {
@@ -2188,7 +2351,8 @@ searchClear?.addEventListener("click", () => {
         searchInput.value = "";
         searchInput.focus();
     }
-    closeSearchResults();
+    setSearchOpen(true);
+    renderSearchPrompt();
     updateSearchUiState();
 });
 
@@ -2198,13 +2362,12 @@ window.addEventListener("keydown", (event) => {
     if ((event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !editing)
         || (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) {
         event.preventDefault();
-        setSearchOpen(true);
-        searchInput?.focus();
-        searchInput?.select();
+        openSearchDialog(true);
         return;
     }
     if (event.key === "Escape" && searchDialog && !searchDialog.hidden) {
         closeSearchResults();
+        searchTrigger?.focus();
         return;
     }
     if (event.key === "Escape" && referencePanel && !referencePanel.hidden) {
@@ -2225,7 +2388,8 @@ window.addEventListener("hashchange", () => {
     }
     setProject(targetProject, {
         sectionId,
-        scrollContent: true
+        scrollContent: true,
+        scrollProjectTitle: isProjectRootSection(sectionId, targetProject)
     });
 });
 window.addEventListener("scroll", queueScrollSpy, { passive: true });
@@ -2249,7 +2413,8 @@ function initializeRoute() {
         if (initialProject) {
             setProject(initialProject, {
                 sectionId: initialSectionId,
-                scrollContent: true
+                scrollContent: true,
+                scrollProjectTitle: isProjectRootSection(initialSectionId, initialProject)
             });
         } else {
             setOverview(false);

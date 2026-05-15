@@ -250,7 +250,7 @@ Code snippets have dedicated neutral tokens so they match the gray documentation
 
 The current UI is intended to feel like a compact developer documentation application. The strongest pieces are the black/white sidebar shell, sticky command bar, command-palette search, categorized overview cards, neutral code blocks, and sheet-style reference panel. Dark mode is the most distinctive version because black chrome is separated from gray reading surfaces.
 
-The main design risks are guide headings that feel too large on desktop, sparse overview sections when a category has only one card, and embedded API/configuration pages that can still look like legacy pages inside the reference sheet. Detailed design rules and the current audit notes live in `AGENTS.md`.
+The main design risks are guide headings that feel too large on desktop, sparse overview sections when a category has only one card, and embedded API/configuration pages that can still look like legacy pages inside the reference sheet. Detailed design rules live in `DESIGN_COOKBOOK.md`; keep it updated with every visible design change.
 
 ## Troubleshooting
 

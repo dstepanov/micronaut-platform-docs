@@ -215,6 +215,8 @@ The platform site is static:
 
 ## Styling Pipeline
 
+The focused design cookbook lives in `DESIGN_COOKBOOK.md`. Any change that affects visible design must update that file in the same patch.
+
 The platform docs page has two different sources of markup and one owner for visible styling:
 
 - Guide body markup comes from the Micronaut docs engine. `ModernGuideRenderer` reads each project's `src/main/docs/guide/toc.yml`, renders the referenced `.adoc` files, and keeps the semantic HTML that the docs engine emits: headings, paragraphs, lists, tables, admonitions, source blocks, callouts, and multi-language selectors.

@@ -67,12 +67,37 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String EMBEDDED_REFERENCE_STYLE = """
 
         <style>
+            :root {
+                color-scheme: light;
+                --platform-reference-bg: #ffffff;
+                --platform-reference-page: #f7f9fb;
+                --platform-reference-text: #172026;
+                --platform-reference-muted: #5d6b78;
+                --platform-reference-line: #d8e1e7;
+                --platform-reference-soft-line: #e7edf2;
+                --platform-reference-accent: #00a676;
+                --platform-reference-link: #1565c0;
+                --platform-reference-code-bg: #f7f7f8;
+                --platform-reference-zebra: #fbfcfd;
+                --platform-reference-font: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+                --platform-reference-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            }
+
             html {
                 scroll-padding-top: 16px;
+                background: var(--platform-reference-bg);
             }
 
             body {
                 margin: 0 !important;
+                background: var(--platform-reference-bg);
+                color: var(--platform-reference-text);
+                font-family: var(--platform-reference-font);
+                font-size: 16px;
+                font-weight: 400;
+                line-height: 1.6;
+                letter-spacing: 0;
+                text-rendering: optimizeLegibility;
             }
 
             #navigation,
@@ -93,11 +118,124 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             main[role="main"] {
                 max-width: none !important;
                 margin: 0 !important;
-                padding: 24px !important;
+                padding: 28px 32px 40px !important;
+                background: var(--platform-reference-bg);
+            }
+
+            h1,
+            h2,
+            h3,
+            h4,
+            h5,
+            h6 {
+                margin: 1.1em 0 0.45em;
+                color: var(--platform-reference-text);
+                font-family: var(--platform-reference-font);
+                font-weight: 700;
+                letter-spacing: 0;
+                line-height: 1.18;
+                word-spacing: normal;
+            }
+
+            h1 {
+                margin-top: 0;
+                font-size: clamp(2rem, 4vw, 2.6rem);
+            }
+
+            h2 {
+                font-size: 1.55rem;
+            }
+
+            h3 {
+                font-size: 1.25rem;
+            }
+
+            p,
+            li,
+            dd,
+            td,
+            th {
+                color: var(--platform-reference-text);
+                font-family: var(--platform-reference-font);
+                font-size: 1rem;
+                line-height: 1.6;
+                word-spacing: normal;
+            }
+
+            p {
+                margin: 0 0 1rem;
+            }
+
+            a {
+                color: var(--platform-reference-link);
+                text-decoration-thickness: 0.08em;
+                text-underline-offset: 0.18em;
+            }
+
+            code,
+            pre {
+                font-family: var(--platform-reference-mono);
+                font-size: 0.9rem;
+            }
+
+            :not(pre) > code {
+                padding: 0.08em 0.35em;
+                border-radius: 4px;
+                background: var(--platform-reference-code-bg);
+                color: var(--platform-reference-text);
+            }
+
+            table {
+                width: 100%;
+                max-width: 100%;
+                margin: 1rem 0 1.5rem;
+                overflow: hidden;
+                border: 1px solid var(--platform-reference-line);
+                border-collapse: separate;
+                border-spacing: 0;
+                border-radius: 8px;
+                background: var(--platform-reference-bg);
+            }
+
+            thead,
+            tfoot {
+                background: var(--platform-reference-page);
+            }
+
+            th,
+            td {
+                padding: 0.625rem 0.75rem;
+                border-right: 1px solid var(--platform-reference-soft-line);
+                border-bottom: 1px solid var(--platform-reference-soft-line);
+                text-align: left;
+                vertical-align: top;
+            }
+
+            th:last-child,
+            td:last-child {
+                border-right: 0;
+            }
+
+            tr:last-child > th,
+            tr:last-child > td {
+                border-bottom: 0;
+            }
+
+            tbody tr:nth-child(even) td {
+                background: var(--platform-reference-zebra);
+            }
+
+            pre {
+                max-width: 100%;
+                overflow-x: auto;
+                padding: 1rem;
+                border: 1px solid var(--platform-reference-line);
+                border-radius: 8px;
+                background: var(--platform-reference-code-bg);
             }
 
             tr:target {
-                outline: 2px solid #00a676;
+                outline: 2px solid var(--platform-reference-accent);
                 outline-offset: -2px;
             }
 
@@ -115,6 +253,8 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final Pattern IMG_TAG = Pattern.compile("<img\\b[^>]*>", Pattern.CASE_INSENSITIVE);
     private static final Pattern PARAGRAPH_TAG = Pattern.compile("<p\\b[^>]*>(.*?)</p>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern CONFIGURATION_PROPERTY_ROW = Pattern.compile("<tr(\\b[^>]*)>\\s*(<td\\b[^>]*>\\s*<p\\b[^>]*>\\s*<code>(.*?)</code>\\s*</p>\\s*</td>)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern JAVADOC_SEARCH_OBJECT = Pattern.compile("\\{([^{}]*)}");
+    private static final Pattern JAVADOC_SEARCH_FIELD = Pattern.compile("\"([plu])\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"");
     private static final Pattern SVG_TAG = Pattern.compile("<svg\\b([^>]*)>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern SVG_CLASS = Pattern.compile("\\bclass\\s*=\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern SVG_VIEW_BOX = Pattern.compile("\\bviewBox\\s*=\\s*\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
@@ -1064,14 +1204,13 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         for (GuideDocument document : documents) {
             GuideProject project = document.project();
             ProjectDescription description = projectDescription(projectDirectory, document, descriptions);
-            String firstSection = firstFragment(document);
             items.add(new SearchItem(
                 "project",
                 project.slug(),
                 project.displayName(),
                 project.displayName(),
-                firstSection,
-                "Project",
+                project.slug(),
+                "Open documentation",
                 project.displayName() + " " + project.slug() + " " + description.shortDescription() + " " + description.longDescription(),
                 ""
             ));
@@ -1090,6 +1229,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
                 ));
             }
             items.addAll(contentSearchItems(document));
+            String firstSection = firstFragment(document);
             String configurationReferencePath = generatedDocumentPath(projectDirectory, project, "guide/configurationreference.html");
             if (!configurationReferencePath.isBlank()) {
                 Path configurationReferenceFile = projectDirectory.resolve(project.generatedDocsPath()).resolve("guide/configurationreference.html");
@@ -1106,20 +1246,36 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
                     ));
                 }
             }
+            for (ApiType apiType : apiTypes(projectDirectory, project)) {
+                items.add(new SearchItem(
+                    "api-type",
+                    project.slug(),
+                    project.displayName(),
+                    apiType.name(),
+                    firstSection,
+                    apiType.packageName(),
+                    apiType.qualifiedName() + " " + apiType.name() + " " + apiType.packageName(),
+                    apiType.referencePath()
+                ));
+            }
         }
 
         Map<String, LinkedHashSet<Integer>> terms = new LinkedHashMap<>();
         for (int i = 0; i < items.size(); i++) {
             SearchItem item = items.get(i);
+            if ("api-type".equals(item.kind())) {
+                continue;
+            }
             boolean contentItem = "content".equals(item.kind());
             LinkedHashSet<String> tokens = new LinkedHashSet<>(searchTokens(item.searchText()));
             tokens.addAll(searchTokens(item.title()));
+            Set<String> prefixTokens = prefixSearchTokens(item, tokens);
             for (String token : tokens) {
                 if (contentItem && !isContentSearchToken(token)) {
                     continue;
                 }
                 addSearchTerm(terms, token, i);
-                if (contentItem) {
+                if (contentItem || !prefixTokens.contains(token)) {
                     continue;
                 }
                 int prefixLength = Math.min(token.length(), 20);
@@ -1164,6 +1320,13 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
         json.append("}}");
         return json.toString();
+    }
+
+    private static Set<String> prefixSearchTokens(SearchItem item, LinkedHashSet<String> tokens) {
+        if ("content".equals(item.kind())) {
+            return Set.of();
+        }
+        return tokens;
     }
 
     private static boolean isContentSearchToken(String token) {
@@ -1248,6 +1411,86 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             properties.putIfAbsent(name, new ConfigurationProperty(name, configurationPropertyAnchor(name), ""));
         }
         return List.copyOf(properties.values());
+    }
+
+    private static List<ApiType> apiTypes(Path projectDirectory, GuideProject project) throws IOException {
+        Path typeSearchIndex = projectDirectory.resolve(project.generatedDocsPath()).resolve("api/type-search-index.js");
+        if (!Files.isRegularFile(typeSearchIndex)) {
+            return List.of();
+        }
+        Path apiDirectory = typeSearchIndex.getParent();
+        String script = Files.readString(typeSearchIndex, StandardCharsets.UTF_8);
+        Map<String, ApiType> types = new LinkedHashMap<>();
+        Matcher objectMatcher = JAVADOC_SEARCH_OBJECT.matcher(script);
+        while (objectMatcher.find()) {
+            Map<String, String> fields = javadocSearchFields(objectMatcher.group(1));
+            String packageName = fields.getOrDefault("p", "");
+            String name = fields.getOrDefault("l", "");
+            if (packageName.isBlank() || name.isBlank()) {
+                continue;
+            }
+            String relativePath = fields.get("u");
+            if (relativePath == null || relativePath.isBlank()) {
+                relativePath = packageName.replace('.', '/') + "/" + name + ".html";
+            }
+            Path typeFile = apiDirectory.resolve(relativePath).normalize();
+            if (!typeFile.startsWith(apiDirectory) || !Files.isRegularFile(typeFile)) {
+                continue;
+            }
+            String referencePath = Path.of("assets", project.slug(), "docs", "api")
+                .resolve(relativePath)
+                .toString()
+                .replace('\\', '/');
+            types.putIfAbsent(packageName + "." + name, new ApiType(name, packageName, referencePath));
+        }
+        return List.copyOf(types.values());
+    }
+
+    private static Map<String, String> javadocSearchFields(String object) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        Matcher fieldMatcher = JAVADOC_SEARCH_FIELD.matcher(object);
+        while (fieldMatcher.find()) {
+            fields.put(fieldMatcher.group(1), unescapeJsonString(fieldMatcher.group(2)));
+        }
+        return fields;
+    }
+
+    private static String unescapeJsonString(String value) {
+        StringBuilder result = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (character != '\\' || i + 1 >= value.length()) {
+                result.append(character);
+                continue;
+            }
+            char escaped = value.charAt(++i);
+            switch (escaped) {
+                case '"' -> result.append('"');
+                case '\\' -> result.append('\\');
+                case '/' -> result.append('/');
+                case 'b' -> result.append('\b');
+                case 'f' -> result.append('\f');
+                case 'n' -> result.append('\n');
+                case 'r' -> result.append('\r');
+                case 't' -> result.append('\t');
+                case 'u' -> {
+                    if (i + 4 < value.length()) {
+                        String codePoint = value.substring(i + 1, i + 5);
+                        try {
+                            result.append((char) Integer.parseInt(codePoint, 16));
+                            i += 4;
+                        } catch (NumberFormatException ignored) {
+                            result.append("\\u").append(codePoint);
+                            i += 4;
+                        }
+                    } else {
+                        result.append("\\u");
+                    }
+                }
+                default -> result.append(escaped);
+            }
+        }
+        return result.toString();
     }
 
     private static String searchResultTitle(GuideProject project, String title) {
@@ -1679,6 +1922,13 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     }
 
     private record ConfigurationProperty(String name, String anchor, String description) {
+    }
+
+    private record ApiType(String name, String packageName, String referencePath) {
+
+        String qualifiedName() {
+            return packageName + "." + name;
+        }
     }
 
     private record SectionStart(TocItem item, int offset) {

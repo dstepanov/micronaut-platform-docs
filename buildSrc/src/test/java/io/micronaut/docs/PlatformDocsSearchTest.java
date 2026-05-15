@@ -44,6 +44,7 @@ final class PlatformDocsSearchTest {
     private static final String BROWSER_CHANNEL = System.getProperty("platformDocs.browserChannel", "chrome");
     private static final String CONFIGURATION_PROPERTY = "netty.default.allocator.num-heap-arenas";
     private static final String CONFIGURATION_PROPERTY_ANCHOR = "configuration-property-netty-default-allocator-num-heap-arenas";
+    private static final String RESOURCE_TEMPLATE_QUOTE = "Resource templates allow servers to expose parameterized resources using URI templates";
     private static final Map<String, String> TEST_PROJECTS = Map.of(
         "core", "Micronaut Core",
         "serde", "Micronaut Serialization",
@@ -104,10 +105,17 @@ final class PlatformDocsSearchTest {
         assertTrue(sourcegenHtml.contains("docs-code-dependency-snippet"), "Dependency snippets must receive the dependency code block style.");
         assertTrue(sourcegenHtml.contains("[BeanName]Object."), "Sourcegen generated-method signatures must remain visible.");
 
+        Path mcpDocument = SITE_DIRECTORY.resolve("platform-assets/documents/mcp.html");
+        String mcpHtml = Files.readString(mcpDocument, StandardCharsets.UTF_8);
+        assertTrue(mcpHtml.contains("<div class=\"quoteblock\">"), "The rendered MCP guide must preserve Asciidoctor quote blocks.");
+        assertTrue(mcpHtml.contains(RESOURCE_TEMPLATE_QUOTE), "The rendered MCP guide must include the resource template quote.");
+
         Path searchIndex = SITE_DIRECTORY.resolve("platform-assets/search-index.json");
         assertTrue(Files.isRegularFile(searchIndex), "The rendered search fixture must include a search index.");
         String indexJson = Files.readString(searchIndex, StandardCharsets.UTF_8);
-        assertTrue(indexJson.contains("applicationcontext"), "The search index must include compact API type terms.");
+        assertTrue(indexJson.contains("\"kind\":\"api-type\""), "The search index must include API class entries.");
+        assertTrue(indexJson.contains("\"title\":\"ApplicationContext\""), "The search index must include API type titles.");
+        assertTrue(indexJson.contains("ApplicationContext.html"), "The search index must link API classes into the reference sheet.");
         assertTrue(indexJson.contains("nettydefaultallocatornumheaparenas"), "The search index must include compact configuration property terms.");
         for (String slug : TEST_PROJECTS.keySet()) {
             assertTrue(indexJson.contains("\"project\":\"" + slug + "\""), "The search index must include " + slug + " entries.");
@@ -124,10 +132,60 @@ final class PlatformDocsSearchTest {
             page.setDefaultNavigationTimeout(10_000);
             try {
                 page.navigate(site.indexUri().toString());
+                page.locator("[data-search-trigger]").click();
+                page.locator("[data-search-backdrop]").waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE));
+                page.locator("[data-search-input]").waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE));
+                assertEquals("Search projects, classes, properties, docs...", page.locator("[data-search-input]").getAttribute("placeholder"));
+                assertTrue((Boolean) page.evaluate(
+                    "() => {" +
+                        "const panel = document.querySelector('[data-search-dialog]');" +
+                        "const backdrop = document.querySelector('[data-search-backdrop]');" +
+                        "const rect = panel.getBoundingClientRect();" +
+                        "const centeredX = Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2) < 4;" +
+                        "const commandTop = rect.top > window.innerHeight * 0.12 && rect.top < window.innerHeight * 0.28;" +
+                        "return !panel.hidden && !backdrop.hidden && centeredX && commandTop;" +
+                        "}"
+                ), "Search must open as a centered command dialog over a visible backdrop.");
+                page.locator(".site-search-prompt").waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE));
+                String promptText = page.locator("[data-search-dialog]").innerText();
+                assertTrue(promptText.contains("Search everything"), "Search panel must expose a command-style heading.");
+                assertTrue(promptText.contains("Properties"), "Search scopes must include properties.");
+                assertTrue(promptText.contains("Classes"), "Search scopes must include API classes.");
+                assertEquals(2, page.locator(".site-search-prompt-badge").count(), "The All prompt should only show Class and Property badges.");
+                assertFalse(promptText.contains("netty.default"), "The prompt must not suggest a specific configuration property.");
+                assertFalse(promptText.contains("ApplicationContext"), "The prompt must not suggest a specific API class.");
+                page.locator("[data-search-scope='projects']").click();
+                assertEquals(0, page.locator(".site-search-prompt-badge").count(), "Class and Property badges belong only to the All prompt.");
+                page.locator("[data-search-scope='all']").click();
+                assertEquals(2, page.locator(".site-search-prompt-badge").count(), "The All prompt should restore Class and Property badges.");
+
+                search(page, "data");
+                Locator dataSearchResult = visibleSearchResult(page);
+                String dataResult = dataSearchResult.innerText();
+                assertTrue(dataResult.contains("Micronaut Data"), "A bare module name should rank the matching project first.");
+                assertEquals("project", dataSearchResult.getAttribute("data-search-kind"), "A bare module name should prefer the project result over guide sections.");
+                assertFalse(dataResult.contains("Project"), "Project results should not show a redundant Project label.");
+
+                search(page, "serialization");
+                Locator serializationSearchResult = visibleSearchResult(page);
+                String serializationResult = serializationSearchResult.innerText();
+                assertTrue(serializationResult.contains("Micronaut Serialization"), "A project name after Micronaut should rank as the closest match.");
+                assertEquals("project", serializationSearchResult.getAttribute("data-search-kind"), "A project name after Micronaut should prefer the project result.");
+                assertFalse(serializationResult.contains("Project"), "Project results should not show a redundant Project label.");
 
                 search(page, "ApplicationContext");
                 Locator firstResult = visibleSearchResult(page);
-                assertTrue(firstResult.innerText().contains("Documentation"), "Expected a documentation search result.");
+                assertTrue(firstResult.innerText().contains("Class"), "Expected an API class search result.");
+                String classResultText = searchResultTextContaining(page, "io.micronaut.context");
+                assertTrue(classResultText.contains("ApplicationContext"), "Expected the ApplicationContext API type search result.");
+                clickSearchResultContaining(page, "ApplicationContext");
+                page.waitForFunction("() => document.body.classList.contains('reference-open')");
+                assertEquals("core", page.evaluate("() => document.body.dataset.project"));
+                page.waitForFunction("() => document.querySelector('[data-reference-frame]')?.src.includes('ApplicationContext.html')");
+                page.locator("button[data-reference-close]").click();
+                page.waitForFunction("() => !document.body.classList.contains('reference-open')");
+
+                search(page, "Application Context");
                 clickSearchResultContaining(page, "Application Context");
                 page.waitForFunction("() => window.location.hash.length > 1 && document.body.dataset.project");
                 assertFalse(((String) page.evaluate("() => document.body.dataset.project")).isBlank());
@@ -136,6 +194,8 @@ final class PlatformDocsSearchTest {
                 search(page, "Micronaut Serialization");
                 clickSearchResultContaining(page, "Micronaut Serialization");
                 page.waitForFunction("() => document.body.dataset.project === 'serde'");
+                assertEquals("#serde", page.evaluate("() => window.location.hash"));
+                assertProjectStartsAtTop(page, "serde");
 
                 search(page, CONFIGURATION_PROPERTY);
                 String resultText = searchResultTextContaining(page, CONFIGURATION_PROPERTY);
@@ -212,6 +272,8 @@ final class PlatformDocsSearchTest {
                 page.waitForFunction("() => document.body.classList.contains('overview-active')");
                 page.locator("[data-project-card='serde']").click();
                 waitForLoadedProject(page, "serde");
+                assertEquals("#serde", page.evaluate("() => window.location.hash"));
+                assertProjectStartsAtTop(page, "serde");
                 assertNoVisibleDocumentationError(page, "serde");
                 assertProjectHasMultiLanguageToolbarTabs(page, "serde");
                 assertEquals("serde", page.evaluate("() => document.body.dataset.project"));
@@ -221,6 +283,8 @@ final class PlatformDocsSearchTest {
                     page.waitForFunction("() => document.body.classList.contains('overview-active')");
                     page.locator("[data-project-card='" + project + "']").click();
                     waitForLoadedProject(page, project);
+                    assertEquals("#" + project, page.evaluate("() => window.location.hash"));
+                    assertProjectStartsAtTop(page, project);
                     assertNoVisibleDocumentationError(page, project);
                     if ("oracle-cloud".equals(project)) {
                         assertProjectDependencyTabsAreScopedToOneGroup(page, project);
@@ -229,6 +293,61 @@ final class PlatformDocsSearchTest {
                 }
             } catch (TimeoutError e) {
                 throw new AssertionError("Project documentation did not load after clicking the sidebar project or overview card.", e);
+            } finally {
+                page.close();
+            }
+        }
+    }
+
+    @Test
+    void resourceTemplateQuoteIsReadableInDarkMode() throws IOException {
+        try (SiteServer site = serveRenderedSite();
+             Playwright playwright = createPlaywright();
+             Browser browser = launchChromium(playwright)) {
+            Page page = browser.newPage(new Browser.NewPageOptions().setViewportSize(1280, 900));
+            page.setDefaultTimeout(10_000);
+            page.setDefaultNavigationTimeout(10_000);
+            try {
+                page.navigate(site.indexUri() + "#mcp-resourcesTemplates");
+                waitForLoadedProject(page, "mcp");
+                page.waitForFunction(
+                    "expected => Array.from(document.querySelectorAll(\"article.guide-document[data-project='mcp'] .quoteblock\"))" +
+                        ".some((quote) => quote.innerText.includes(expected))",
+                    RESOURCE_TEMPLATE_QUOTE
+                );
+                if (!(Boolean) page.evaluate("() => document.body.classList.contains('dark-mode')")) {
+                    page.locator("[data-theme-switcher]").click();
+                    page.waitForFunction("() => document.body.classList.contains('dark-mode')");
+                }
+
+                @SuppressWarnings("unchecked")
+                List<String> quoteStyles = (List<String>) page.evaluate(
+                    "expected => {" +
+                        "const quote = Array.from(document.querySelectorAll(\"article.guide-document[data-project='mcp'] .quoteblock\"))" +
+                            ".find((element) => element.innerText.includes(expected));" +
+                        "const blockquote = quote?.querySelector('blockquote');" +
+                        "const paragraph = quote?.querySelector('p');" +
+                        "const blockquoteStyle = getComputedStyle(blockquote);" +
+                        "const paragraphStyle = getComputedStyle(paragraph);" +
+                        "return [" +
+                            "paragraph?.innerText.trim() || ''," +
+                            "paragraphStyle.color," +
+                            "paragraphStyle.fontStyle," +
+                            "blockquoteStyle.backgroundColor," +
+                            "blockquoteStyle.borderTopColor," +
+                            "blockquoteStyle.borderRadius" +
+                        "];" +
+                    "}",
+                    RESOURCE_TEMPLATE_QUOTE
+                );
+                assertEquals(RESOURCE_TEMPLATE_QUOTE, quoteStyles.get(0));
+                assertTrue(perceivedBrightness(quoteStyles.get(1)) > 180, "Resource template quote text must stay readable in dark mode: " + quoteStyles.get(1));
+                assertEquals("normal", quoteStyles.get(2), "Resource template quote text should read like documentation, not a pull quote.");
+                assertFalse("rgba(0, 0, 0, 0)".equals(quoteStyles.get(3)), "Resource template quote must use a visible dark-mode panel background.");
+                assertTrue(perceivedBrightness(quoteStyles.get(4)) > 180, "Resource template quote border must be visible in dark mode: " + quoteStyles.get(4));
+                assertTrue(quoteStyles.get(5).startsWith("8px"), "Resource template quote should use the platform rounded callout frame.");
+            } catch (TimeoutError e) {
+                throw new AssertionError("The MCP resource template quote was not rendered with readable dark-mode styles.", e);
             } finally {
                 page.close();
             }
@@ -366,8 +485,18 @@ final class PlatformDocsSearchTest {
     }
 
     private static void search(Page page, String query) {
+        openSearchDialog(page);
         page.locator("[data-search-input]").fill(query);
         visibleSearchResult(page);
+    }
+
+    private static void openSearchDialog(Page page) {
+        boolean open = (Boolean) page.evaluate("() => !document.querySelector('[data-search-dialog]')?.hidden");
+        if (open) {
+            return;
+        }
+        page.locator("[data-search-trigger]").click();
+        page.locator("[data-search-input]").waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE));
     }
 
     private static Locator visibleSearchResult(Page page) {
@@ -407,6 +536,22 @@ final class PlatformDocsSearchTest {
                 "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
                 "const content = article?.querySelector('[data-document-content]');" +
                 "return Boolean(article && !article.hidden && article.dataset.documentLoaded === 'true' && content?.childElementCount);" +
+                "}",
+            project
+        );
+    }
+
+    private static void assertProjectStartsAtTop(Page page, String project) {
+        page.waitForFunction(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "const topbar = document.querySelector('.topbar');" +
+                "if (!article || article.hidden) {" +
+                "return false;" +
+                "}" +
+                "const preferredTop = (topbar?.getBoundingClientRect().height || 0) + 16;" +
+                "const articleTop = article.getBoundingClientRect().top;" +
+                "return Math.abs(articleTop - preferredTop) <= 10;" +
                 "}",
             project
         );
@@ -554,6 +699,22 @@ final class PlatformDocsSearchTest {
             "}",
             project
         ), "Switching one dependency tab must not switch other dependency tab groups.");
+    }
+
+    private static double perceivedBrightness(String cssColor) {
+        int start = cssColor.indexOf('(');
+        int end = cssColor.indexOf(')');
+        if (start < 0 || end < 0 || end <= start) {
+            return 0;
+        }
+        String[] components = cssColor.substring(start + 1, end).split(",");
+        if (components.length < 3) {
+            return 0;
+        }
+        double red = Double.parseDouble(components[0].trim());
+        double green = Double.parseDouble(components[1].trim());
+        double blue = Double.parseDouble(components[2].trim());
+        return (red * 299 + green * 587 + blue * 114) / 1000;
     }
 
     private static Playwright createPlaywright() {

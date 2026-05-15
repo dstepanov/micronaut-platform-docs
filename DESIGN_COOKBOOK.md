@@ -1,0 +1,141 @@
+# Micronaut Platform Docs Design Cookbook
+
+This file is the design source of truth for the generated platform documentation UI. Update it whenever a change affects layout, typography, colors, cards, sidebar behavior, search, reference sheets, code snippets, admonitions, or any other visible design detail.
+
+## Working Rule
+
+- Every design change must include a matching note in this cookbook.
+- Keep rules concrete: name the component, the intended behavior, and the CSS/template/rendering owner.
+- Prefer updating existing rules over adding contradictory notes.
+- Verify design changes with a focused render and a browser screenshot for at least one desktop viewport and one mobile viewport when layout can be affected.
+
+## Design Direction
+
+The site should feel like a compact developer documentation application: dense, readable, predictable, and quiet. It should not feel like a marketing landing page. The closest visual reference is shadcn-style application UI: simple surfaces, 8px radius cards, restrained borders, compact controls, strong focus states for controls, and minimal decoration.
+
+## Style Ownership
+
+- Main page styling belongs in `buildSrc/src/main/resources/io/micronaut/docs/assets/site.css`.
+- Application shell markup belongs in Handlebars templates under `buildSrc/src/main/resources/io/micronaut/docs/templates`.
+- Rendered guide markup comes from `ModernGuideRenderer` and must be styled through `.guide-document` selectors.
+- Embedded API and configuration reference pages are styled only through iframe-injected CSS in `GeneratePlatformDocsTask`.
+- Generated `index.html` must import only `platform-assets/site.css` for the platform shell. Do not import old guide CSS, Javadoc CSS, or configuration-reference CSS into the main page.
+
+## Tokens And Palette
+
+- Extend theme tokens before introducing new component colors.
+- Light mode uses a pale page background with white cards: `--bg #f7f9fb`, `--surface #ffffff`, `--card-surface #ffffff`, `--text #172026`, `--muted #5d6b78`, `--line #d8e1e7`, `--accent #00a676`, `--link #1565c0`.
+- Dark mode separates chrome from content: sidebar and top bar are black, while content surfaces use neutral grays. Keep dark reading surfaces gray rather than pure black.
+- Code and dependency snippets use neutral gray surfaces, not blue-gray or IDE-themed frames. Light mode uses white or near-white snippet panels over the pale page; dark mode uses deeper neutral gray panels over the gray article surface.
+- Admonitions should be calm and low saturation unless the content is genuinely dangerous.
+
+## Overview Page
+
+- The overview description is a compact subtitle, not a hero. It stays full width, readable, and short enough not to consume the first mobile screen.
+- Categories are stacked sections. The category icon, title, and description must appear above that category's project cards.
+- Do not use a desktop layout where category text becomes a left rail and cards appear to the right.
+- Project cards should remain close to square on desktop, with name and short description in the header, concise long description in the body, and footer actions plus version metadata at the bottom.
+- Card text must not be ellipsized. If content is too long, shorten the description instead of hiding text.
+- Cards may use subtle elevation and borders, but no nested card structures.
+- Category counts stay hidden.
+
+## Sidebar
+
+- The sidebar is the primary project inventory. Project rows are first-level expandable items.
+- Categories group projects, with `Most Popular` first.
+- Project and TOC labels must remain readable. Avoid truncation that hides meaning; allow wrapping where needed.
+- The project filter is a compact affordance beside `Projects`.
+- Submenu hover and active highlights should leave a visible right gutter in the sidebar. Do not let nested TOC highlights run flush to the right edge.
+- Selecting a project should bring the project title and document actions into view. On mobile, outside clicks after a project selection should close the sidebar.
+
+## Top Bar
+
+- The top bar is sticky and task-oriented: sidebar toggle, breadcrumb/version context, search, and theme toggle.
+- Keep version metadata small. It should not compete with search.
+- Icon buttons need accessible labels and stable square hit areas.
+
+## Search
+
+- Search is the primary command surface and should look like a compact shadcn-style command menu: a top-bar trigger opens a wide dialog centered horizontally in the page, placed around the upper-middle of the viewport, the page behind it is blurred, the real search input sits inside the dialog, scope tabs stay quiet, keyboard focus is visible, and there is no marketing copy.
+- The placeholder names the actual searchable inventory: projects, API classes, configuration properties, and guide docs.
+- The open empty state should be useful, not blank. Show a short command heading and, in the All scope only, quiet `Class` and `Property` hint badges. Do not show hard-coded class names or property keys as suggestions.
+- Results use a stable hierarchy: icon, optional kind badge, optional project/context, title, and detail. Use kind badges only for Javadoc classes and configuration properties in the All scope.
+- Project results should be the simplest and strongest result rows: show the module name as the larger title, a short `Open documentation` detail, and no redundant `Project` label. Project-level documentation links use the project slug hash, such as `#data`, and open at the project title and metadata actions rather than the first guide section.
+- Repository results should read as external source links: use the project name as the title, `GitHub repository` as plain context, and the repository path plus version as the detail.
+- API class results come from generated Javadoc `type-search-index.js` files and open in the reference sheet so users keep platform-docs context.
+- Keep API class entries out of the prefix-expanded term map; scan their compact title/package text in JavaScript so class search stays flexible without making the generated index unnecessarily large.
+- Keep the search index static and generated at build time. Do not add client-side crawlers or runtime syntax/search libraries unless the generated index becomes too large for fast interaction.
+
+## Guide Typography
+
+- Scope guide body rules to `.guide-document`.
+- Paragraphs use readable documentation rhythm: about `1rem` font size, `1.6` line height, normal weight, left aligned, and no forced justification.
+- Headings should orient the reader without dominating the page. Desktop guide headings are intentionally tighter than the old generated docs scale.
+- Preserve hierarchy: `h1` and `h2` are primary anchors, while `h3` through `h6` step down clearly.
+- Keep anchor links hidden until hover/focus.
+- Lists, definition lists, tables, examples, sidebars, quotes, and callouts should feel like article content, not navigation.
+- Quote blocks use a quiet callout treatment: neutral panel, compact quote mark, normal document text, and readable dark-mode colors. Do not use oversized italic pull-quote styling for short explanatory quotes.
+- Standalone generated hash anchors before configuration tables are hidden visually. They are structural anchors, not visible content.
+
+## Code Snippets
+
+- Single-language snippets show code plus copy action only. Do not add language badges, bottom-right labels, or decorative headers.
+- Multi-language snippets use tabs as controls for equivalent variants.
+- Real snippet titles sit outside the code frame.
+- Unknown `[source]` snippets remain plaintext and must not be labeled Bash.
+- Shiki is static build-time highlighting only. Do not add runtime syntax highlighters.
+- Code frames must visibly separate from the guide background. In light mode they use a white panel, clear neutral border, and a very soft shadow on the pale page; in dark mode they use a darker neutral panel on the gray reading surface.
+- Tabs and code frames use the same neutral family. Separators should stay subtle, tab labels should be small and plain, and inactive labels must still meet readable contrast in both themes.
+- Language icons can use brand color in light mode, but dark mode may lift very dark brand colors or neutral document icons so the tab row remains readable.
+- Code titles stay outside the frame and read like compact captions: sans-serif, muted but readable, no border, no filled title bar.
+
+## Admonitions
+
+- Admonitions stay in document flow and keep content left aligned.
+- Use one calm icon, neutral frame, and subtle accent color. Note, tip, important, warning, and caution may have different icon accents, but the container background remains neutral.
+- Avoid saturated status panels and colorful backgrounds unless severity demands it.
+
+## Tables
+
+- Tables use a rounded neutral frame with a quiet header background and subtle row striping.
+- Table captions are document captions, not old Asciidoctor labels: sans-serif, non-italic, muted, left aligned, and wrapped normally.
+- Configuration property names in table cells keep a small inline-code background so long keys remain scannable.
+
+## Reference Sheet
+
+- The sheet should occupy about 60 percent of desktop width and blur/de-emphasize the page behind it.
+- It must offer expand, open-in-new-tab, and close actions.
+- API and configuration pages keep the platform context inside an iframe.
+- Injected iframe styling should normalize font, headings, tables, inline code, pre blocks, links, and targeted rows without importing legacy CSS into the shell.
+
+## Mobile Rules
+
+- Mobile top bar prioritizes search and compact controls.
+- Overview cards stack full width.
+- Sidebar behaves like a sheet and should not obscure navigation after selecting a project.
+- Avoid first-screen crowding. The overview subtitle should remain concise.
+
+## Verification Checklist
+
+- Run a focused render, normally:
+
+  ```bash
+  ./gradlew -q -PplatformDocs.projectSlugs=core,serde,data,mcp,oracle-cloud,sourcegen renderPlatformDocs
+  ```
+
+- Check generated CSS if the browser seems stale:
+
+  ```bash
+  rg -n "project-category|guide-document h1|reference" build/site/platform-assets/site.css
+  ```
+
+- Use a cache-busting URL when visually checking local output, for example `index.html?v=<change>#platform`.
+- Verify light and dark mode when changing colors.
+- Verify mobile around `390px` width when changing layout, sidebar, top bar, overview, or cards.
+
+## Current Decisions
+
+- Category sections use the previous stacked structure: header and description first, project cards below.
+- Desktop guide headings were reduced so generated docs do not overpower the reading view.
+- Programmatic focus on the overview section should not draw a full-page browser outline.
+- Embedded configuration reference pages use injected platform-style typography and tables inside the reference sheet.

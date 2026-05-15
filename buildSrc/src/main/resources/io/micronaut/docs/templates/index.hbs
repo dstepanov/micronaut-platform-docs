@@ -64,25 +64,11 @@
                     </span>
                 </nav>
                 <div class="site-search" data-search>
-                    <div class="site-search-field" data-search-field>
+                    <button class="site-search-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="site-search-dialog" data-search-trigger>
                         {{{icons.search}}}
-                        <input type="search" placeholder="Search projects, docs, config, APIs" aria-label="Search platform docs" aria-controls="site-search-results" aria-expanded="false" autocomplete="off" spellcheck="false" data-search-input>
-                        <kbd class="site-search-shortcut" aria-hidden="true">/</kbd>
-                        <button class="site-search-clear" type="button" title="Clear search" aria-label="Clear search" data-search-clear hidden>
-                            {{{icons.x}}}
-                        </button>
-                    </div>
-                    <div class="site-search-panel" role="dialog" aria-label="Search platform docs" data-search-dialog hidden>
-                        <div class="site-search-scopes" role="tablist" aria-label="Search scope">
-                            <button class="site-search-scope active" type="button" role="tab" aria-selected="true" data-search-scope="all">All</button>
-                            <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="projects">Projects</button>
-                            <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="docs">Docs</button>
-                            <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="config">Config</button>
-                            <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="api" title="API and Javadoc">API</button>
-                            <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="repositories">Repos</button>
-                        </div>
-                        <div id="site-search-results" class="site-search-results" role="listbox" data-search-results hidden></div>
-                    </div>
+                        <span class="site-search-trigger-label">Search projects, classes, properties, docs...</span>
+                        <kbd class="site-search-shortcut" aria-hidden="true">⌘K</kbd>
+                    </button>
                 </div>
                 <div class="topbar-actions">
                     <button id="theme-switcher" class="theme-toggle" type="button" title="Switch to dark theme" aria-label="Switch to dark theme" aria-pressed="false" data-theme-switcher>
@@ -94,6 +80,29 @@
                     {{{icons.menu}}}
                 </button>
             </header>
+            <div class="site-search-backdrop" data-search-backdrop hidden></div>
+            <div id="site-search-dialog" class="site-search-panel" role="dialog" aria-modal="true" aria-label="Search platform docs" data-search-dialog hidden>
+                <div class="site-search-dialog-field" data-search-field>
+                    {{{icons.search}}}
+                    <input type="search" placeholder="Search projects, classes, properties, docs..." aria-label="Search platform docs" aria-controls="site-search-results" aria-expanded="false" autocomplete="off" spellcheck="false" data-search-input>
+                    <button class="site-search-clear" type="button" title="Clear search" aria-label="Clear search" data-search-clear hidden>
+                    {{{icons.x}}}
+                    </button>
+                </div>
+                <div class="site-search-panel-heading">
+                    <span>Search everything</span>
+                    <small>Projects, guide sections, API classes, configuration properties, and repositories.</small>
+                </div>
+                <div class="site-search-scopes" role="tablist" aria-label="Search scope">
+                    <button class="site-search-scope active" type="button" role="tab" aria-selected="true" data-search-scope="all">All</button>
+                    <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="projects">Projects</button>
+                    <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="docs">Docs</button>
+                    <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="config">Properties</button>
+                    <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="api" title="API classes and Javadoc">Classes</button>
+                    <button class="site-search-scope" type="button" role="tab" aria-selected="false" data-search-scope="repositories">Repos</button>
+                </div>
+                <div id="site-search-results" class="site-search-results" role="listbox" data-search-results hidden></div>
+            </div>
             <main class="content" id="content">
                 <section class="overview-page" id="{{overviewSectionId}}" data-overview tabindex="-1">
                     <header class="overview-header">
@@ -115,7 +124,7 @@
                             </header>
                             <div class="project-card-grid">
 {{#each documents}}
-                        <article class="project-card" data-project-card="{{slug}}" data-project-card-target="{{firstSection}}" role="link" tabindex="0" aria-label="Open {{displayName}} documentation">
+                        <article class="project-card" data-project-card="{{slug}}" data-project-card-target="{{slug}}" role="link" tabindex="0" aria-label="Open {{displayName}} documentation">
                             <div class="project-card-header">
                                 <span class="project-card-icon" aria-hidden="true">{{{projectIcon}}}</span>
                                 <div>
@@ -126,7 +135,7 @@
                             <p class="project-card-long-description">{{longDescription}}</p>
                             <footer class="project-card-footer">
                                 <div class="project-card-links">
-                                    <a href="#{{firstSection}}" data-overview-doc-link aria-label="Open {{displayName}} docs">
+                                    <a href="#{{slug}}" data-overview-doc-link aria-label="Open {{displayName}} docs">
                                         {{{@root.icons.fileText}}}
                                         <span>Docs</span>
                                     </a>
@@ -147,7 +156,7 @@
                     </div>
                 </section>
 {{#each documents}}
-            <article class="guide-document docs-content" data-project="{{slug}}" data-document-url="{{documentPath}}" data-document-script-url="{{documentScriptPath}}" aria-busy="false"{{#unless selected}} hidden{{/unless}}>
+            <article id="{{slug}}" class="guide-document docs-content" data-project="{{slug}}" data-document-url="{{documentPath}}" data-document-script-url="{{documentScriptPath}}" aria-busy="false"{{#unless selected}} hidden{{/unless}}>
                 <div class="document-meta">
                     <div class="document-meta-row document-meta-primary">
                         <a href="{{repositoryUrl}}" aria-label="{{displayName}} GitHub repository">
