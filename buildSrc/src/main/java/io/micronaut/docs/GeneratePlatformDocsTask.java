@@ -327,12 +327,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
             getLogger().quiet("[{}/{}] Reading and copying {}.", ++index, projects.size(), project.displayName());
             copyGeneratedDocs(projectDirectory, outputDirectory, project);
             String platformVersion = platformVersions.get(project.platformVersionKey());
-            getLogger().quiet("[{}/{}] Rendering {} guide with the Micronaut docs engine.", index, projects.size(), project.displayName());
-            String html = renderProjectGuideHtml(
-                projectDirectory,
-                project,
-                platformVersion
-            );
+            String html = readOrRenderProjectGuideHtml(projectDirectory, project, platformVersion, index, projects.size());
             documents.add(parseGuide(project, html, projectDirectory.resolve(project.tocPath()), platformVersions.get(project.platformVersionKey())));
         }
 
@@ -564,6 +559,42 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         String platformVersion
     ) throws IOException {
         return new ModernGuideRenderer(projectDirectory, project, platformVersion).render();
+    }
+
+    private String readOrRenderProjectGuideHtml(
+        Path projectDirectory,
+        GuideProject project,
+        String platformVersion,
+        int projectIndex,
+        int projectCount
+    ) throws IOException {
+        Path renderedGuideHtml = projectDirectory.resolve(project.platformGuideHtmlPath());
+        if (Files.isRegularFile(renderedGuideHtml) && !hasGuideSourceFiles(projectDirectory, project)) {
+            getLogger().quiet(
+                "[{}/{}] Reading pre-rendered {} guide fragment because source guide files are not available.",
+                projectIndex,
+                projectCount,
+                project.displayName()
+            );
+            return Files.readString(renderedGuideHtml, StandardCharsets.UTF_8);
+        }
+        getLogger().quiet(
+            "[{}/{}] Rendering {} guide with the Micronaut docs engine.",
+            projectIndex,
+            projectCount,
+            project.displayName()
+        );
+        return renderProjectGuideHtml(projectDirectory, project, platformVersion);
+    }
+
+    private static boolean hasGuideSourceFiles(Path projectDirectory, GuideProject project) throws IOException {
+        Path guideSource = projectDirectory.resolve(project.submodulePath()).resolve("src/main/docs/guide");
+        if (!Files.isDirectory(guideSource)) {
+            return false;
+        }
+        try (var paths = Files.walk(guideSource)) {
+            return paths.anyMatch(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(".adoc"));
+        }
     }
 
     private static void copyDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
@@ -960,6 +991,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
 
     private static Map<String, String> iconModel() throws IOException {
         Map<String, String> icons = new LinkedHashMap<>();
+        icons.put("arrowUp", lucideIcon("arrow-up", "trigger-icon"));
         icons.put("bookOpen", lucideIcon("book-open", "project-icon"));
         icons.put("braces", lucideIcon("braces", "badge-icon"));
         icons.put("externalLink", lucideIcon("external-link", "badge-icon"));
@@ -1588,7 +1620,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         model.put("firstSection", firstFragment(document));
         model.put("documentPath", projectDocumentPath(project, ".html"));
         model.put("documentScriptPath", projectDocumentPath(project, ".js"));
-        model.put("toc", tocNodeModels(buildTocTree(document.tocItems())));
+        model.put("toc", sidebarTocNodeModels(buildTocTree(document.tocItems())));
         model.put("selected", selected);
         String apiReferencePath = generatedDocumentPath(projectDirectory, project, "api/index.html");
         String configurationReferencePath = generatedDocumentPath(projectDirectory, project, "guide/configurationreference.html");
@@ -1822,6 +1854,21 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         List<Map<String, Object>> models = new ArrayList<>();
         for (TocNode node : nodes) {
             models.add(tocNodeModel(node));
+        }
+        return models;
+    }
+
+    private static List<Map<String, Object>> sidebarTocNodeModels(List<TocNode> nodes) {
+        List<Map<String, Object>> models = new ArrayList<>();
+        for (TocNode node : nodes) {
+            TocItem item = node.item();
+            Map<String, Object> model = new LinkedHashMap<>();
+            model.put("prefixedId", item.prefixedId());
+            model.put("numberHtml", item.numberHtml());
+            model.put("titleHtml", item.titleHtml());
+            model.put("children", List.of());
+            model.put("hasChildren", false);
+            models.add(model);
         }
         return models;
     }

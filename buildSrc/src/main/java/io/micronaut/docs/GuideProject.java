@@ -47,6 +47,10 @@ record GuideProject(
         return submodulePath + "/build/docs";
     }
 
+    String platformGuideHtmlPath() {
+        return submodulePath + "/build/platform-docs/guide.html";
+    }
+
     static List<GuideProject> readManifest(Path manifestFile) throws IOException {
         if (!Files.isRegularFile(manifestFile)) {
             throw new IOException("Missing platform docs project manifest: " + manifestFile

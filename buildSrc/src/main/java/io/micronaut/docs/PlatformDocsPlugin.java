@@ -214,6 +214,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.setDescription("Stages generated guide docs for upload as a GitHub Actions shard artifact.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getProjectManifest().convention(projectManifest);
+                task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getOutputDirectory().convention(project.getLayout().getBuildDirectory().dir("guide-docs-artifact"));
                 task.getShardPlan().convention(shardPlan);
                 task.getShardIndex().convention(guideShardIndex);

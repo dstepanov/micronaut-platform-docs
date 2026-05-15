@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 public abstract class StageGuideDocsArtifactTask extends DefaultTask {
 
@@ -28,6 +29,10 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
     @InputFile
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getProjectManifest();
+
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getPlatformVersionCatalog();
 
     @InputFile
     @Optional
@@ -64,6 +69,7 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
             shardCount
         );
         List<GuideProject> selectedProjects = selection.projects();
+        Map<String, String> platformVersions = PlatformVersions.read(getPlatformVersionCatalog().get().getAsFile().toPath());
 
         deleteDirectory(outputDirectory);
         Files.createDirectories(outputDirectory);
@@ -85,7 +91,21 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
             getLogger().quiet("[{}/{}] Staging {} docs.", ++index, selectedProjects.size(), project.displayName());
             copyDirectory(sourceDirectory, targetDirectory);
             copyToc(projectDirectory, outputDirectory, project);
+            renderPlatformGuide(projectDirectory, outputDirectory, project, platformVersions);
         }
+    }
+
+    private void renderPlatformGuide(
+        Path projectDirectory,
+        Path outputDirectory,
+        GuideProject project,
+        Map<String, String> platformVersions
+    ) throws IOException {
+        String platformVersion = platformVersions.get(project.platformVersionKey());
+        Path target = outputDirectory.resolve(project.platformGuideHtmlPath());
+        Files.createDirectories(target.getParent());
+        getLogger().quiet("Rendering {} platform guide fragment for the final site.", project.displayName());
+        Files.writeString(target, new ModernGuideRenderer(projectDirectory, project, platformVersion).render());
     }
 
     private static void copyToc(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {

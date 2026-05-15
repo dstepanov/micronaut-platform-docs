@@ -116,6 +116,7 @@ The generator then:
 
 - reads each generated `build/docs/guide/index.html`
 - reads each project's `src/main/docs/guide/toc.yml`
+- renders guide body markup directly from each project's source `.adoc` files unless a staged `build/platform-docs/guide.html` fragment is available
 - prefixes anchors so all guides can coexist in one page
 - copies generated guide content to `build/site/assets/<project>/docs`
 - copies shared Micronaut guide assets from `grails-doc-files.jar` to `build/site/guide-assets`
@@ -173,7 +174,7 @@ build/guide-docs-artifact/repos/<project>/src/main/docs/guide/toc.yml
 | `alignPlatformVersions` | Checks out each project submodule at the platform-managed release tag. | `repos/*` git state |
 | `verifyPlatformAlignment` | Verifies submodule HEAD tags match platform-managed versions. | No |
 | `buildPlatformGuideDocs` | Runs each submodule's `docs` task with Java 25. | `repos/*/build/docs` |
-| `stagePlatformGuideDocsArtifact` | Stages generated guide docs for a selected shard. | `build/guide-docs-artifact` |
+| `stagePlatformGuideDocsArtifact` | Stages generated guide docs and pre-rendered platform guide fragments for a selected shard. | `build/guide-docs-artifact` |
 | `renderPlatformDocs` | Renders the single-page site from existing generated guide docs. | `build/site` |
 | `generatePlatformDocs` | Builds guide docs and renders the single-page platform site. | `build/site` |
 | `verifyPlatformDocs` | Verifies generated HTML and required static assets. | No |
@@ -188,8 +189,8 @@ The `Platform Docs` GitHub Actions workflow lives at `.github/workflows/platform
 The workflow uses GitHub Actions matrix parallelism rather than parallel Gradle workers in one runner:
 
 - `plan` checks out the root repository without recursive submodules, initializes only `repos/micronaut-platform`, scans the platform catalog, and writes the matrix from `gradle/platform-doc-shards.properties`
-- `build-guides` runs one job per matrix shard, checks out the root repository without recursive submodules, initializes only the selected guide submodules, verifies alignment, builds docs, and uploads `build/guide-docs-artifact`
-- `render` downloads and merges all shard artifacts, initializes only `repos/micronaut-platform`, renders `build/site`, verifies the rendered page, and uploads the GitHub Pages artifact
+- `build-guides` runs one job per matrix shard, checks out the root repository without recursive submodules, initializes only the selected guide submodules, verifies alignment, builds docs, renders platform guide fragments, and uploads `build/guide-docs-artifact`
+- `render` downloads and merges all shard artifacts, initializes only `repos/micronaut-platform`, reads the staged platform guide fragments, renders `build/site`, verifies the rendered page, and uploads the GitHub Pages artifact
 
 ```bash
 ./gradlew -q writePlatformDocsShardMatrix
@@ -258,3 +259,4 @@ The main design risks are guide headings that feel too large on desktop, sparse 
 - If alignment fails because a submodule has local changes, inspect the affected `repos/<project>` checkout before rerunning `alignPlatformVersions`.
 - If the generated repository metadata cache is missing entries, initialize the relevant submodules or set `GITHUB_TOKEN` or `GH_TOKEN` and rerun `scanPlatformProjects`.
 - If the generated site is missing a project, confirm that the project has `src/main/docs/guide/toc.yml` and that its submodule `docs` task produced `build/docs/guide/index.html`.
+- If CI fails in the final render job while rendering guide sources, confirm each shard artifact contains `repos/<project>/build/platform-docs/guide.html`; the final job should not need every source submodule initialized.

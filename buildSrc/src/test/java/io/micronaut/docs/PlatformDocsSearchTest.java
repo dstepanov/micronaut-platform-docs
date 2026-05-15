@@ -72,6 +72,8 @@ final class PlatformDocsSearchTest {
         assertTrue(sidebarHtml.contains("data-sidebar-category=\"most-popular\""), "The sidebar must include the Most Popular category.");
         assertTrue(sidebarHtml.contains("data-sidebar-category=\"api\""), "The sidebar must include the API category.");
         assertFalse(sidebarHtml.contains("sidebar-category-count"), "The sidebar must not show category counts.");
+        assertFalse(sidebarHtml.contains("class=\"toc-children\""), "The sidebar must keep subsections out of the left menu.");
+        assertFalse(sidebarHtml.contains("href=\"#core-whatsNew\""), "The sidebar must not render second-level Core subsections.");
         for (Map.Entry<String, String> project : TEST_PROJECTS.entrySet()) {
             assertTrue(sidebarHtml.contains("data-project-option=\"" + project.getKey() + "\""), "The sidebar must include " + project.getValue() + ".");
             Path projectDocument = SITE_DIRECTORY.resolve("platform-assets/documents/" + project.getKey() + ".html");
@@ -253,7 +255,7 @@ final class PlatformDocsSearchTest {
         try (SiteServer site = serveRenderedSite();
              Playwright playwright = createPlaywright();
              Browser browser = launchChromium(playwright)) {
-            Page page = browser.newPage(new Browser.NewPageOptions().setViewportSize(1280, 900));
+            Page page = browser.newPage(new Browser.NewPageOptions().setViewportSize(1500, 900));
             page.setDefaultTimeout(10_000);
             page.setDefaultNavigationTimeout(10_000);
             try {
@@ -266,6 +268,9 @@ final class PlatformDocsSearchTest {
                 assertProjectHasHighlightedCode(page, "core");
                 assertProjectHighlightsCodeWithCallouts(page, "core");
                 assertProjectCodeTitlesAreOutsideFrames(page, "core");
+                assertPageIndexListsAndNavigates(page, "core", "1.1 What's New in Micronaut Framework 5.0.x", "core-whatsNew");
+                page.locator(".toc a[href='#core-quickStart']").click();
+                assertPageIndexListsSection(page, "core", "2.1 Install the CLI", "core-buildCLI");
                 assertEquals("core", page.evaluate("() => document.body.dataset.project"));
 
                 page.locator(".topbar-title a[href='#platform']").click();
@@ -276,6 +281,7 @@ final class PlatformDocsSearchTest {
                 assertProjectStartsAtTop(page, "serde");
                 assertNoVisibleDocumentationError(page, "serde");
                 assertProjectHasMultiLanguageToolbarTabs(page, "serde");
+                assertPageIndexListsSection(page, "serde", "1.1 Why Micronaut Serialization?", "serde-why");
                 assertEquals("serde", page.evaluate("() => document.body.dataset.project"));
 
                 for (String project : List.of("data", "mcp", "oracle-cloud", "sourcegen")) {
@@ -564,6 +570,31 @@ final class PlatformDocsSearchTest {
                 "}",
             project
         );
+    }
+
+    private static void assertPageIndexListsAndNavigates(Page page, String project, String label, String sectionId) {
+        assertPageIndexListsSection(page, project, label, sectionId);
+        page.locator("[data-page-index-link][href='#" + sectionId + "']").click();
+        page.waitForFunction(
+            "sectionId => window.location.hash === '#' + sectionId && " +
+                "document.querySelector(`[data-page-index-link][data-section='${sectionId}']`)?.classList.contains('active')",
+            sectionId
+        );
+    }
+
+    private static void assertPageIndexListsSection(Page page, String project, String label, String sectionId) {
+        page.waitForFunction(
+            "project => {" +
+                "const pageIndex = document.querySelector('[data-page-index]');" +
+                "return document.body.dataset.project === project && pageIndex && !pageIndex.hidden && " +
+                    "getComputedStyle(pageIndex).display !== 'none';" +
+                "}",
+            project
+        );
+        Locator link = page.locator("[data-page-index-link][href='#" + sectionId + "']");
+        link.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE));
+        assertEquals(label, link.innerText().trim());
+        assertTrue(page.locator("[data-page-index]").innerText().contains("On this page"), "The page index must expose an On this page heading.");
     }
 
     private static void assertNoVisibleDocumentationError(Page page, String project) {

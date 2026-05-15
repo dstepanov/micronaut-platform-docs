@@ -185,7 +185,7 @@ Important classes:
 - `AlignPlatformVersionsTask`: checks out submodules at expected version tags.
 - `VerifyPlatformAlignmentTask`: validates selected submodule versions.
 - `BuildGuideDocsTask`: invokes submodule docs builds with Java 25.
-- `StageGuideDocsArtifactTask`: stages docs output for shard artifact upload.
+- `StageGuideDocsArtifactTask`: stages generated docs output and pre-rendered platform guide fragments for shard artifact upload.
 - `GeneratePlatformDocsTask`: renders the site, copies guide assets, builds sidebar/menu/search/reference assets, and writes lazy document fragments.
 - `ModernGuideRenderer`: renders guide HTML directly from `src/main/docs/guide/toc.yml` and `.adoc` sources with the Micronaut docs engine.
 - `VerifyPlatformDocsTask`: checks generated site integrity.
@@ -201,6 +201,8 @@ The renderer should use project sources, not downloaded docs:
 - The renderer temporarily sets `user.dir` to the submodule directory because legacy snippet macros depend on it.
 - Includes use the submodule root as the Asciidoctor base directory.
 - The generated `build/docs` output is still required because API docs and configuration reference pages are copied from submodule builds.
+- GitHub Actions shard jobs render each guide fragment from source while the selected submodules are initialized, then stage it as `repos/<project>/build/platform-docs/guide.html`.
+- The final render job reads staged `build/platform-docs/guide.html` fragments when present, so it does not need to initialize all guide source submodules after downloading shard artifacts.
 - Shared guide assets are copied from `grails-doc-files.jar` on the classpath, not from a downloaded documentation site.
 - Local UI assets are copied from `buildSrc/src/main/resources/io/micronaut/docs/assets`.
 
@@ -470,6 +472,7 @@ If Playwright cannot launch in the local macOS sandbox, tests may abort with a c
 - Missing submodule: run `./gradlew -q syncPlatformProjectSubmodules`, or for CI shard work use `syncPlatformGuideShardSubmodules`.
 - Alignment failure: inspect the submodule for local changes, then run `./gradlew -q alignPlatformVersions`.
 - Missing generated guide HTML: run `./gradlew -q -PplatformDocs.projectSlugs=<slug> buildPlatformGuideDocs`.
+- CI final render fails while rendering Core/source guides: ensure `stagePlatformGuideDocsArtifact` produced `repos/<project>/build/platform-docs/guide.html` in each shard artifact. The final render job should read those fragments instead of rendering from uninitialized submodule sources.
 - `Documentation could not be loaded`: check both `platform-assets/documents/<slug>.html` and `<slug>.js`; the JavaScript fallback should cover `file://` and HTTP fetch failures.
 - No search index available under `file://`: ensure `platform-assets/search-index.js` exists; browsers block JSON fetches from `file://`.
 - Code lacks highlighting after lazy load: check that the Shiki tasks ran and that `platform-assets/documents/<slug>.html` contains `class="shiki"` with `--shiki-light` / `--shiki-dark` token styles.

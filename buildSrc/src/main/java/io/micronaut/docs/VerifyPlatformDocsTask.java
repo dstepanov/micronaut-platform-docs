@@ -90,8 +90,8 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(html.contains("data-menu-url=\"platform-assets/sidebar-menu.html\""), "Generated page does not reference the lazy sidebar menu fragment.");
         require(html.contains("data-menu-script-url=\"platform-assets/sidebar-menu.js\""), "Generated page does not reference the lazy sidebar menu script fallback.");
         require(!html.contains("<details class=\"project-section\""), "Generated page still embeds first-level project sidebar sections.");
-        require(sidebarMenuHtml.contains("<details class=\"toc-section\""), "Generated sidebar menu does not contain collapsible sections.");
         require(sidebarMenuHtml.contains("<details class=\"project-section\""), "Generated sidebar menu does not contain first-level project sections.");
+        require(!sidebarMenuHtml.contains("class=\"toc-children\""), "Generated sidebar menu still contains nested TOC subsections.");
         require(html.contains("data-overview"), "Generated page does not contain the platform overview.");
         require(html.contains("data-project-category=\"most-popular\""), "Generated overview does not put Most Popular first.");
         require(html.contains("class=\"project-card-short-description\""), "Generated overview cards do not contain short project descriptions.");
@@ -99,6 +99,8 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(html.contains("class=\"project-card-footer\""), "Generated overview cards do not contain a footer.");
         require(html.contains("data-overview-doc-link"), "Generated overview cards do not link back to the in-page docs.");
         require(html.contains("class=\"document-skeleton\""), "Generated document loading state does not use a skeleton.");
+        require(html.contains("data-page-index"), "Generated page does not contain the right-side page index.");
+        require(html.contains("On this page"), "Generated page index does not label the current page sections.");
         require(html.contains("data-platform"), "Generated top bar does not display platform information.");
         require(html.contains("Micronaut Platform Docs"), "Generated top bar does not use the platform docs title.");
         require(!html.contains("sidebar-brand-version"), "Generated sidebar still contains the top-left version hint.");
@@ -137,6 +139,8 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         String siteCss = Files.readString(outputDirectory.resolve("platform-assets/site.css"), StandardCharsets.UTF_8);
         require(siteScript.contains("window.addEventListener(\"scroll\", queueScrollSpy"), "Generated script does not highlight sections while scrolling.");
         require(siteScript.contains("activeSectionFromScroll"), "Generated script does not include scroll spy section detection.");
+        require(siteScript.contains("renderPageIndex"), "Generated script does not build the right-side page index.");
+        require(siteScript.contains("refreshPageIndex"), "Generated script does not sync the page index active section.");
         require(siteScript.contains("loadProjectDocument"), "Generated script does not lazy-load project documents.");
         require(siteScript.contains("loadSidebarMenu"), "Generated script does not lazy-load the sidebar menu.");
         require(siteScript.contains("openReference"), "Generated script does not support opening project references in context.");

@@ -39,6 +39,9 @@ const referenceProject = document.querySelector("[data-reference-project-label]"
 const referenceOpenNew = document.querySelector("[data-reference-open-new]");
 const referenceExpand = document.querySelector("[data-reference-expand]");
 const referenceSwitcher = document.querySelector("[data-reference-switcher]");
+const pageIndex = document.querySelector("[data-page-index]");
+const pageIndexNav = document.querySelector("[data-page-index-nav]");
+const pageIndexTop = document.querySelector("[data-page-index-top]");
 const projectCards = Array.from(document.querySelectorAll("[data-project-card]"));
 const projectArticles = new Map(Array.from(document.querySelectorAll("article.guide-document[data-project]")).map((article) => [article.dataset.project, article]));
 const projectDocumentPromises = new Map();
@@ -47,6 +50,8 @@ let projectOptions = [];
 let projectSections = new Map();
 let activeSectionId = "";
 let activeLink;
+let activePageIndexLink;
+let activePageIndexRootId = "";
 let activeReferenceButton;
 let activeReferenceKind = "";
 let focusedSearchTarget;
@@ -1066,7 +1071,7 @@ function requestSidebarMenu() {
     if (window.location.protocol === "file:") {
         return loadSidebarMenuScript();
     }
-    return fetch(sidebarMenuUrl, { cache: "force-cache" })
+    return fetch(sidebarMenuUrl, { cache: "no-cache" })
         .then((response) => {
             if (!response.ok) {
                 throw new Error("Unable to load sidebar menu");
@@ -1082,6 +1087,8 @@ function refreshProjectSections() {
         const section = summary.closest("[data-project-nav]");
         return [section.dataset.projectNav, { section, summary, article: projectArticles.get(section.dataset.projectNav) }];
     }));
+    headingCache.clear();
+    renderPageIndex(document.body.dataset.project);
 }
 
 function showSidebarMenuError() {
@@ -1582,14 +1589,157 @@ function isProjectRootSection(sectionId, project) {
 
 function sectionHeadings(project) {
     if (!headingCache.has(project)) {
-        const data = projectSections.get(project);
-        const tocSections = new Set(Array.from(data?.section.querySelectorAll("[data-section]") ?? []).map((link) => link.dataset.section));
-        const article = data?.article;
+        const article = projectSections.get(project)?.article || projectArticles.get(project);
         const headings = Array.from(article?.querySelectorAll("h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]") ?? [])
-            .filter((heading) => tocSections.has(heading.id));
+            .filter((heading) => heading.id.startsWith(project + "-"))
+            .filter((heading) => numberedHeading(heading));
         headingCache.set(project, headings);
     }
     return headingCache.get(project);
+}
+
+function headingTextWithoutAnchor(heading) {
+    const clone = heading.cloneNode(true);
+    clone.querySelectorAll("a.anchor").forEach((anchor) => anchor.remove());
+    return clone.textContent.replace(/\s+/g, " ").trim();
+}
+
+function numberedHeading(heading) {
+    const text = headingTextWithoutAnchor(heading).replace(/^§\s*/, "");
+    const match = text.match(/^(\d+(?:\.\d+)*)\s+(.+)$/);
+    if (!match) {
+        return undefined;
+    }
+    return {
+        id: heading.id,
+        number: match[1],
+        title: match[2].trim(),
+        depth: match[1].split(".").length - 1,
+        label: match[1] + " " + match[2].trim()
+    };
+}
+
+function numberedHeadingItems(project) {
+    return sectionHeadings(project)
+        .map(numberedHeading)
+        .filter(Boolean);
+}
+
+function pageIndexRoot(project, activeId) {
+    const items = numberedHeadingItems(project);
+    if (!items.length) {
+        return undefined;
+    }
+    const activeItem = items.find((item) => item.id === activeId) || items[0];
+    const rootNumber = activeItem.number.split(".")[0];
+    return items.find((item) => item.depth === 0 && item.number === rootNumber) || activeItem;
+}
+
+function pageIndexHeadingItems(project, activeId) {
+    const root = pageIndexRoot(project, activeId);
+    if (!root) {
+        return [];
+    }
+    return numberedHeadingItems(project)
+        .filter((item) => item.depth > 0 && item.number.startsWith(root.number + "."))
+        .map((item) => ({
+            id: item.id,
+            level: Math.min(Math.max(item.depth, 1), 3),
+            label: item.label
+        }))
+        .slice(0, 32);
+}
+
+function clearPageIndexActiveLink() {
+    if (activePageIndexLink) {
+        activePageIndexLink.classList.remove("active");
+        activePageIndexLink.removeAttribute("aria-current");
+        activePageIndexLink = undefined;
+    }
+}
+
+function hidePageIndex() {
+    clearPageIndexActiveLink();
+    document.body.classList.remove("page-index-active");
+    if (pageIndex) {
+        pageIndex.hidden = true;
+    }
+    if (pageIndexNav) {
+        pageIndexNav.innerHTML = "";
+    }
+    activePageIndexRootId = "";
+}
+
+function renderPageIndex(project, activeId) {
+    if (!pageIndex || !pageIndexNav || !project || document.body.classList.contains("overview-active")) {
+        hidePageIndex();
+        return;
+    }
+    const article = projectSections.get(project)?.article || projectArticles.get(project);
+    if (!article || article.dataset.documentLoaded !== "true") {
+        hidePageIndex();
+        return;
+    }
+    const resolvedActiveId = activeId || activeSectionId || activeSectionFromScroll();
+    const root = pageIndexRoot(project, resolvedActiveId);
+    const items = pageIndexHeadingItems(project, resolvedActiveId);
+    if (!items.length) {
+        hidePageIndex();
+        return;
+    }
+    pageIndexNav.innerHTML = items.map((item) => `
+        <a class="page-index-link page-index-link-level-${item.level}" href="#${escapeHtml(item.id)}" data-page-index-link data-section="${escapeHtml(item.id)}">
+            ${escapeHtml(item.label)}
+        </a>
+    `).join("");
+    if (pageIndexTop) {
+        const target = root?.id || project;
+        const label = root?.label || projectTitleForSearch(project);
+        pageIndexTop.href = "#" + target;
+        pageIndexTop.setAttribute("aria-label", "Back to " + label);
+        pageIndexTop.setAttribute("title", "Back to " + label);
+    }
+    activePageIndexRootId = root?.id || "";
+    pageIndex.hidden = false;
+    document.body.classList.add("page-index-active");
+    refreshPageIndex(resolvedActiveId);
+}
+
+function refreshPageIndex(activeId) {
+    if (!pageIndex || pageIndex.hidden || !pageIndexNav) {
+        clearPageIndexActiveLink();
+        return;
+    }
+    const project = document.body.dataset.project;
+    const root = pageIndexRoot(project, activeId);
+    if (root?.id && root.id !== activePageIndexRootId) {
+        renderPageIndex(project, activeId);
+        return;
+    }
+    const nextLink = activeId
+        ? pageIndexNav.querySelector("[data-page-index-link][data-section='" + CSS.escape(activeId) + "']")
+        : undefined;
+    if (activePageIndexLink && activePageIndexLink !== nextLink) {
+        activePageIndexLink.classList.remove("active");
+        activePageIndexLink.removeAttribute("aria-current");
+        activePageIndexLink = undefined;
+    }
+    if (nextLink) {
+        nextLink.classList.add("active");
+        nextLink.setAttribute("aria-current", "location");
+        activePageIndexLink = nextLink;
+    }
+}
+
+function sidebarSectionIdForActive(project, activeId) {
+    const section = projectSections.get(project)?.section;
+    if (!section || !activeId) {
+        return activeId;
+    }
+    if (section.querySelector(".toc a[href='#" + CSS.escape(activeId) + "']")) {
+        return activeId;
+    }
+    return pageIndexRoot(project, activeId)?.id || activeId;
 }
 
 function activeSectionFromScroll() {
@@ -1959,6 +2109,7 @@ function clearActiveLink() {
         activeLink = undefined;
     }
     activeSectionId = "";
+    refreshPageIndex("");
 }
 
 function setOverview(options) {
@@ -1979,6 +2130,7 @@ function setOverview(options) {
         overviewPage.hidden = false;
     }
     clearActiveLink();
+    hidePageIndex();
     closeReference();
     if (settings.updateHash && (settings.forceHash || window.location.hash.slice(1) !== overviewHash)) {
         history.replaceState(null, "", "#" + overviewHash);
@@ -2037,6 +2189,7 @@ function setProject(project, options) {
     if (settings.updateHash && (settings.forceHash || !projectFromHash())) {
         history.replaceState(null, "", "#" + targetSection);
     }
+    renderPageIndex(project);
     refreshActiveLink(settings.scrollContent ? activeTargetSection : undefined);
     if (settings.scrollSubmenu && project !== previousProject) {
         scrollProjectSubmenu(next?.section);
@@ -2049,6 +2202,7 @@ function setProject(project, options) {
             if (document.body.dataset.project !== project) {
                 return;
             }
+            renderPageIndex(project);
             if (settings.scrollContent) {
                 const scrollOptions = {
                     block: settings.scrollBlock,
@@ -2065,6 +2219,7 @@ function setProject(project, options) {
         })
         .catch(() => {
             if (document.body.dataset.project === project) {
+                hidePageIndex();
                 queueScrollSpy();
             }
         });
@@ -2072,19 +2227,22 @@ function setProject(project, options) {
 
 function refreshActiveLink(nextActiveSectionId) {
     const activeId = nextActiveSectionId || decodeURIComponent(window.location.hash.slice(1));
-    if (activeLink && activeLink.dataset.section !== activeId) {
+    const project = projectFromSectionId(activeId) || document.body.dataset.project;
+    const sidebarActiveId = sidebarSectionIdForActive(project, activeId);
+    if (activeLink && activeLink.dataset.section !== sidebarActiveId) {
         activeLink.classList.remove("active");
         activeLink = undefined;
     }
     if (!activeId) {
+        refreshPageIndex("");
         return;
     }
-    const project = projectFromSectionId(activeId) || document.body.dataset.project;
-    const nextLink = projectSections.get(project)?.section.querySelector(".toc a[href='#" + CSS.escape(activeId) + "']");
+    const nextLink = projectSections.get(project)?.section.querySelector(".toc a[href='#" + CSS.escape(sidebarActiveId) + "']");
     if (nextLink) {
         nextLink.classList.add("active");
         activeLink = nextLink;
         activeSectionId = activeId;
+        refreshPageIndex(activeId);
         let parent = nextLink.parentElement;
         while (parent) {
             if (parent.tagName === "DETAILS") {
@@ -2092,6 +2250,8 @@ function refreshActiveLink(nextActiveSectionId) {
             }
             parent = parent.parentElement;
         }
+    } else {
+        refreshPageIndex(activeId);
     }
 }
 

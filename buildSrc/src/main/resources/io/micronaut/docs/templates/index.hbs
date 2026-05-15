@@ -202,6 +202,17 @@
             </article>
 {{/each}}
             </main>
+            <aside class="page-index" aria-label="On this page" data-page-index hidden>
+                <div class="page-index-inner">
+                    <div class="page-index-header">
+                        <span>On this page</span>
+                        <a class="page-index-top" href="#content" title="Back to top" aria-label="Back to top" data-page-index-top>
+                            {{{icons.arrowUp}}}
+                        </a>
+                    </div>
+                    <nav class="page-index-nav" aria-label="Current page sections" data-page-index-nav></nav>
+                </div>
+            </aside>
             <div class="reference-overlay" data-reference-overlay data-reference-close hidden></div>
             <aside class="reference-panel" role="dialog" aria-modal="true" aria-labelledby="reference-title" aria-label="Project reference" tabindex="-1" data-reference-panel hidden>
                 <div class="reference-header">
