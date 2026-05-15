@@ -46,6 +46,7 @@ The site should feel like a compact developer documentation application: dense, 
 - The left sidebar shows only project rows and top-level guide sections. Numbered subsections such as `1.1`, `1.2`, and `2.3.1` belong in the right-side page index instead of the left menu.
 - Project and TOC labels must remain readable. Avoid truncation that hides meaning; allow wrapping where needed.
 - Submenu hover and active highlights should leave a visible right gutter in the sidebar. Do not let nested TOC highlights run flush to the right edge.
+- Keep the expanded desktop sidebar compact, around 308px, so the article retains priority on laptop-sized screens.
 - Selecting a project should bring the project title and document actions into view without auto-scrolling the sidebar inventory. On mobile, outside clicks after a project selection should close the sidebar.
 
 ## Page Index
@@ -97,15 +98,18 @@ The site should feel like a compact developer documentation application: dense, 
 - Real snippet titles sit outside the code frame.
 - Unknown `[source]` snippets remain plaintext and must not be labeled Bash.
 - Shiki is static build-time highlighting only. Do not add runtime syntax highlighters.
-- Code frames must visibly separate from the guide background. In light mode they use a white panel, clear neutral border, and a very soft shadow on the pale page; in dark mode they use a darker neutral panel on the gray reading surface.
-- Tabs and code frames use the same neutral family. Separators should stay subtle, tab labels should be small and plain, and inactive labels must still meet readable contrast in both themes.
-- Language icons can use brand color in light mode, but dark mode may lift very dark brand colors or neutral document icons so the tab row remains readable.
+- Code frames must visibly separate from the guide background through background contrast, not outlines. Do not use visible borders or shadows on code frames.
+- Tabs and code frames use the same neutral family. Avoid a visible separator between the tab row and code body; tab labels should use compact system-sans typography around `12px / 16px`, regular weight, with only a modest selected-weight increase, and inactive labels must still meet readable contrast in both themes.
+- Language icons in code tabs inherit the tab text color. Keep them gray and monochrome so tabs read as quiet controls, not a strip of brand badges.
+- The Java language tab uses a Java-cup inspired line icon instead of the OpenJDK mark. Keep the shape recognizable but subdued through the same gray tab color as the other languages.
+- Filled brand glyphs such as Kotlin can be optically smaller than line icons so their visual weight matches Java and Properties in the tab row.
+- The Properties language tab uses a small sliders-style line icon. It should suggest key/value configuration without looking like a document badge or a separate status color.
 - Code titles stay outside the frame and read like compact captions: sans-serif, muted but readable, no border, no filled title bar.
 
 ## Admonitions
 
 - Admonitions stay in document flow and keep content left aligned.
-- Use one calm icon, neutral frame, and subtle accent color. Note, tip, important, warning, and caution may have different icon accents, but the container background remains neutral.
+- Use one calm icon, neutral background, and subtle accent color. Note, tip, important, warning, and caution may have different icon accents, but the container is separated by background contrast instead of borders.
 - Avoid saturated status panels and colorful backgrounds unless severity demands it.
 
 ## Tables

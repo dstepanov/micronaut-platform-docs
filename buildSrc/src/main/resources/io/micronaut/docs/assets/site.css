@@ -13,15 +13,15 @@
     --link: #1565c0;
     --code-text: #172026;
     --code-frame-bg: #ffffff;
-    --code-frame-border: #cfd8e3;
+    --code-frame-border: transparent;
     --code-frame-separator: rgba(23, 32, 38, 0.085);
     --code-frame-copy-bg: color-mix(in srgb, #ffffff 92%, transparent);
     --code-frame-copy-hover-bg: #ececef;
-    --code-frame-shadow: 0 1px 2px rgba(23, 32, 38, 0.045), 0 12px 28px rgba(23, 32, 38, 0.035);
+    --code-frame-shadow: none;
     --code-tab-text: #566474;
     --code-tab-selected-text: #172026;
-    --code-dependency-bg: #fcfcfd;
-    --code-dependency-border: #ccd6e0;
+    --code-dependency-bg: #f1f4f6;
+    --code-dependency-border: transparent;
     --code-dependency-separator: rgba(23, 32, 38, 0.085);
     --code-dependency-copy-bg: color-mix(in srgb, #ffffff 92%, transparent);
     --shadow: 0 18px 50px rgba(23, 32, 38, 0.08);
@@ -60,15 +60,15 @@ body.dark-mode {
     --link: #77aeff;
     --code-text: #f1f1f1;
     --code-frame-bg: #202020;
-    --code-frame-border: #505050;
+    --code-frame-border: transparent;
     --code-frame-separator: rgba(255, 255, 255, 0.11);
     --code-frame-copy-bg: color-mix(in srgb, #292929 94%, transparent);
     --code-frame-copy-hover-bg: #353535;
     --code-frame-shadow: none;
     --code-tab-text: #d1d5db;
     --code-tab-selected-text: #ffffff;
-    --code-dependency-bg: #232323;
-    --code-dependency-border: #525252;
+    --code-dependency-bg: #292929;
+    --code-dependency-border: transparent;
     --code-dependency-separator: rgba(255, 255, 255, 0.11);
     --code-dependency-copy-bg: color-mix(in srgb, #2b2b2b 94%, transparent);
     --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
@@ -121,7 +121,7 @@ body.dark-mode .topbar {
 
 .app-shell {
     display: grid;
-    grid-template-columns: 384px minmax(0, 1fr);
+    grid-template-columns: 308px minmax(0, 1fr);
     min-height: 100vh;
     background: var(--bg);
     transition: grid-template-columns 0.18s ease;
@@ -2164,8 +2164,8 @@ body.dark-mode .theme-icon-sun {
 
 .guide-document .admonitionblock {
     --admonition-accent: #64748b;
-    --admonition-bg: rgba(23, 32, 38, 0.016);
-    --admonition-border: rgba(23, 32, 38, 0.09);
+    --admonition-bg: rgba(23, 32, 38, 0.035);
+    --admonition-border: transparent;
     --admonition-text: rgba(23, 32, 38, 0.82);
     --admonition-link: color-mix(in srgb, var(--link) 78%, var(--text));
     --admonition-code-bg: rgba(23, 32, 38, 0.055);
@@ -2199,11 +2199,11 @@ body.dark-mode .theme-icon-sun {
 .guide-document .admonitionblock > table {
     width: 100%;
     overflow: hidden;
-    border: 1px solid var(--admonition-border);
+    border: 0;
     border-radius: 8px;
     border-collapse: separate;
     background: var(--admonition-bg);
-    box-shadow: 0 1px 2px rgba(23, 32, 38, 0.03);
+    box-shadow: none;
 }
 
 .guide-document .admonitionblock > table > tbody,
@@ -2524,9 +2524,9 @@ body.dark-mode .theme-icon-sun {
     gap: 2px;
     margin: 1rem 0 0.75rem;
     padding: 4px;
-    border: 1px solid var(--line);
+    border: 0;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--surface) 88%, #f4f4f5);
+    background: color-mix(in srgb, var(--bg) 70%, var(--surface));
 }
 
 .guide-document .multi-language-selector .language-option {
@@ -2544,11 +2544,11 @@ body.dark-mode .theme-icon-sun {
     box-shadow: none;
     color: var(--muted);
     cursor: pointer;
-    font-family: var(--font-sans);
-    font-size: 0.9rem;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.75rem;
     font-style: normal;
-    font-weight: 500;
-    line-height: 1;
+    font-weight: 400;
+    line-height: 1.333333;
     text-decoration: none;
     text-transform: none;
 }
@@ -2564,10 +2564,10 @@ body.dark-mode .theme-icon-sun {
 }
 
 .guide-document .multi-language-selector .language-option.selected {
-    background: #ffffff;
+    background: var(--surface);
     color: var(--text);
-    font-weight: 700;
-    box-shadow: 0 1px 2px rgba(23, 32, 38, 0.08);
+    font-weight: 500;
+    box-shadow: none;
 }
 
 .guide-document .multi-language-selector[aria-hidden="true"] {
@@ -2582,7 +2582,7 @@ body.dark-mode .theme-icon-sun {
     position: relative;
     margin: 1rem 0 1.25rem;
     overflow: hidden;
-    border: 1px solid var(--code-frame-border);
+    border: 0;
     border-radius: 12px;
     background: var(--code-frame-bg);
     box-shadow: var(--code-frame-shadow);
@@ -2599,28 +2599,21 @@ body.dark-mode .theme-icon-sun {
     gap: 10px;
     min-height: 43px;
     padding: 8px 10px;
-    border-bottom: 1px solid var(--code-frame-separator);
     background: var(--code-frame-bg);
     color: var(--code-tab-text);
     font-size: 0.75rem;
     line-height: 1.35;
 }
 
-.guide-document .docs-code-toolbar:has(.docs-code-language-icon-properties) {
-    border-bottom-color: rgba(23, 32, 38, 0.04);
-}
-
 .guide-document .docs-code-dependency-snippet,
 .guide-document .docs-code-block:has(.docs-code-language-icon-gradle),
 .guide-document .docs-code-block:has(.docs-code-language-icon-maven) {
-    border-color: var(--code-dependency-border);
     background: var(--code-dependency-bg);
 }
 
 .guide-document .docs-code-dependency-snippet .docs-code-toolbar,
 .guide-document .docs-code-block:has(.docs-code-language-icon-gradle) .docs-code-toolbar,
 .guide-document .docs-code-block:has(.docs-code-language-icon-maven) .docs-code-toolbar {
-    border-bottom-color: var(--code-dependency-separator);
     background: var(--code-dependency-bg);
 }
 
@@ -2669,11 +2662,11 @@ body.dark-mode .theme-icon-sun {
     box-shadow: none;
     color: var(--code-tab-text);
     cursor: default;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 0.8rem;
-    font-weight: 500;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.75rem;
+    font-weight: 400;
     letter-spacing: 0;
-    line-height: 1.35;
+    line-height: 1.333333;
     text-transform: none;
 }
 
@@ -2692,7 +2685,7 @@ body.dark-mode .theme-icon-sun {
 
 .guide-document .docs-code-tabs .docs-code-language.selected {
     background: transparent;
-    font-weight: 600;
+    font-weight: 500;
     box-shadow: none;
 }
 
@@ -2741,7 +2734,7 @@ body.dark-mode .theme-icon-sun {
 }
 
 .guide-document .docs-code-language-icon-java {
-    color: #e76f00;
+    color: #5382a1;
 }
 
 .guide-document .docs-code-language-icon-kotlin {
@@ -2783,6 +2776,21 @@ body.dark-mode .theme-icon-sun {
 
 .guide-document .docs-code-language-icon-typescript {
     color: #3178c6;
+}
+
+.guide-document .docs-code-language .docs-code-language-icon {
+    color: currentColor;
+    opacity: 0.76;
+}
+
+.guide-document .docs-code-language-icon-kotlin svg {
+    width: 15px;
+    height: 15px;
+}
+
+.guide-document .docs-code-tabs .docs-code-language:hover .docs-code-language-icon,
+.guide-document .docs-code-tabs .docs-code-language.selected .docs-code-language-icon {
+    opacity: 0.9;
 }
 
 .guide-document .docs-code-language-text {
@@ -2979,8 +2987,8 @@ body.dark-mode .guide-document p.tableblock > code:only-child {
 
 body.dark-mode .guide-document .admonitionblock {
     --admonition-accent: #b8c7d6;
-    --admonition-bg: rgba(255, 255, 255, 0.028);
-    --admonition-border: rgba(255, 255, 255, 0.11);
+    --admonition-bg: rgba(255, 255, 255, 0.055);
+    --admonition-border: transparent;
     --admonition-text: rgba(255, 255, 255, 0.78);
     --admonition-link: rgba(255, 255, 255, 0.86);
     --admonition-code-bg: rgba(255, 255, 255, 0.08);
@@ -3039,7 +3047,6 @@ body.dark-mode .guide-document .conum[data-value] {
 }
 
 body.dark-mode .guide-document .multi-language-selector {
-    border-color: #333333;
     background: #111111;
 }
 
@@ -3075,18 +3082,12 @@ body.dark-mode .page-index-link:focus-visible {
 }
 
 body.dark-mode .guide-document .docs-code-block {
-    border-color: var(--code-frame-border);
     background: var(--code-frame-bg);
     box-shadow: none;
 }
 
 body.dark-mode .guide-document .docs-code-toolbar {
-    border-bottom-color: var(--code-frame-separator);
     background: var(--code-frame-bg);
-}
-
-body.dark-mode .guide-document .docs-code-toolbar:has(.docs-code-language-icon-properties) {
-    border-bottom-color: rgba(255, 255, 255, 0.045);
 }
 
 body.dark-mode .guide-document .docs-code-title {
@@ -3116,11 +3117,25 @@ body.dark-mode .guide-document .docs-code-language-icon-gradle {
     color: #5ecde8;
 }
 
+body.dark-mode .guide-document .docs-code-language-icon-java {
+    color: #8fb6cf;
+}
+
 body.dark-mode .guide-document .docs-code-language-icon-properties,
 body.dark-mode .guide-document .docs-code-language-icon-hocon,
 body.dark-mode .guide-document .docs-code-language-icon-json,
 body.dark-mode .guide-document .docs-code-language-icon-text {
     color: #cbd5e1;
+}
+
+body.dark-mode .guide-document .docs-code-language .docs-code-language-icon {
+    color: currentColor;
+    opacity: 0.78;
+}
+
+body.dark-mode .guide-document .docs-code-tabs .docs-code-language:hover .docs-code-language-icon,
+body.dark-mode .guide-document .docs-code-tabs .docs-code-language.selected .docs-code-language-icon {
+    opacity: 0.92;
 }
 
 body.dark-mode .guide-document .docs-code-content {
@@ -3147,14 +3162,12 @@ body.dark-mode .guide-document .docs-code-block > .docs-code-copy {
 body.dark-mode .guide-document .docs-code-dependency-snippet,
 body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-gradle),
 body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-maven) {
-    border-color: var(--code-dependency-border);
     background: var(--code-dependency-bg);
 }
 
 body.dark-mode .guide-document .docs-code-dependency-snippet .docs-code-toolbar,
 body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-gradle) .docs-code-toolbar,
 body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-maven) .docs-code-toolbar {
-    border-bottom-color: var(--code-dependency-separator);
     background: var(--code-dependency-bg);
 }
 
@@ -3395,7 +3408,7 @@ body.dark-mode .reference-switch[aria-selected="true"] {
         position: fixed;
         inset: 0 auto 0 0;
         z-index: 40;
-        width: min(384px, calc(100vw - 32px));
+        width: min(308px, calc(100vw - 32px));
         height: 100vh;
         transform: translateX(-100%);
         transition: transform 0.18s ease;
