@@ -18,7 +18,7 @@ The site should feel like a compact developer documentation application: dense, 
 - Main page styling belongs in `buildSrc/src/main/resources/io/micronaut/docs/assets/site.css`.
 - Application shell markup belongs in Handlebars templates under `buildSrc/src/main/resources/io/micronaut/docs/templates`.
 - Rendered guide markup comes from `ModernGuideRenderer` and must be styled through `.guide-document` selectors.
-- Embedded API and configuration reference pages are styled only through iframe-injected CSS in `GeneratePlatformDocsTask`.
+- Embedded API and configuration reference pages are styled only through iframe-injected CSS loaded from `buildSrc/src/main/resources/io/micronaut/docs/assets/embedded-reference.css` by `GeneratePlatformDocsTask`.
 - Generated `index.html` must import only `platform-assets/site.css` for the platform shell. Do not import old guide CSS, Javadoc CSS, or configuration-reference CSS into the main page.
 
 ## Tokens And Palette
@@ -34,7 +34,7 @@ The site should feel like a compact developer documentation application: dense, 
 - The overview description is a compact subtitle, not a hero. It stays full width, readable, and short enough not to consume the first mobile screen.
 - Categories are stacked sections. The category icon, title, and description must appear above that category's project cards.
 - Do not use a desktop layout where category text becomes a left rail and cards appear to the right.
-- Project cards should remain close to square on desktop, with name and short description in the header, concise long description in the body, and footer actions plus version metadata at the bottom.
+- Project cards should remain close to square on desktop, with a minimum grid track around `320px` so sparse categories do not render as tiny boxes. Keep name and short description in the header, concise long description in the body, and footer actions plus version metadata at the bottom.
 - Card text must not be ellipsized. If content is too long, shorten the description instead of hiding text.
 - Cards may use subtle elevation and borders, but no nested card structures.
 - Category counts stay hidden.
@@ -66,7 +66,7 @@ The site should feel like a compact developer documentation application: dense, 
 
 - The top bar is sticky and task-oriented: sidebar toggle, breadcrumb/version context, search, and theme toggle.
 - On project pages, the breadcrumb includes the active project name for deep-link orientation. This is preferred over automatically scrolling the sidebar to the active project.
-- Keep version metadata small. It should not compete with search.
+- Keep version metadata small. It should not compete with search. Project detail metadata should not duplicate the project version when the surrounding platform context already provides version orientation.
 - Icon buttons need accessible labels and stable square hit areas.
 - The light/dark theme toggle matches the search trigger height, stays transparent in both themes, and uses a darker monochrome icon so it reads as a utility control rather than a filled badge.
 
@@ -102,14 +102,16 @@ The site should feel like a compact developer documentation application: dense, 
 - Unknown `[source]` snippets remain plaintext and must not be labeled Bash.
 - Shiki is static build-time highlighting only. Do not add runtime syntax highlighters.
 - Code frames separate from the guide background with a neutral frame surface plus a quiet 1px outer border. The light border is visible but soft; the dark border should be nearly invisible and subordinate to the darker frame background. Do not add shadows.
-- Dependency snippets share the same background, separator, and copy-button surface tokens as normal code snippets in both light and dark mode. Gradle and Maven tabs should not introduce a second color system.
+- Code, properties, and dependency snippets share the same shadcn-style card structure: `.docs-snippet-card` maps to Card, `.docs-snippet-card-header` to CardHeader, `.docs-snippet-card-title` to CardTitle, `.docs-snippet-card-action` to CardAction, `.docs-snippet-card-content` to CardContent, and `.docs-snippet-card-footer` to CardFooter. Keep these as the styling owners and treat `docs-code-*` classes as compatibility and behavior hooks.
+- Dependency snippets and properties snippets share the same background, separator, and copy-button surface tokens as normal code snippets in both light and dark mode. Gradle, Maven, and Properties tabs should not introduce a second color system.
 - Tabs and code frames use the same neutral family. Keep a single split line between the tab row and code body: visible in light mode, almost invisible in dark mode. Tab labels should use compact system-sans typography around `12px / 16px`, regular weight, with only a modest selected-weight increase, and inactive labels must still meet readable contrast in both themes.
 - Language icons in code tabs inherit the tab text color. Keep them gray and monochrome so tabs read as quiet controls, not a strip of brand badges.
 - Code language icons are generated from SVG resources. Brand icons live under `assets/icons/brands`; project-owned generic format icons live under `assets/icons/languages`. Do not add fallback SVG path data to JavaScript templates.
 - The Java language tab uses a filled Java-cup inspired icon with no wordmark instead of the OpenJDK mark. Keep the shape recognizable but subdued through the same gray tab color as the other languages.
 - Filled brand glyphs such as Kotlin can be optically smaller than line icons so their visual weight matches Java and Properties in the tab row.
 - The Properties language tab uses a small sliders-style line icon. It should suggest key/value configuration without looking like a document badge or a separate status color.
-- Code titles stay outside the frame and share the same compact caption treatment as table captions and image titles: sans-serif, muted but readable, no border, no filled title bar. Keep the title close to the code frame it names, including multi-language samples where hidden selector markup may sit between the title and block.
+- Code titles stay outside the frame and share the same compact caption treatment as table captions, configuration-property table titles, and image titles: sans-serif, muted but readable, no border, no filled title bar. Keep the title close to the code frame it names, including multi-language samples where hidden selector markup may sit between the title and block.
+- Code callout lists after snippets are snippet footers. They use `.docs-snippet-card-footer`, sit on a lighter quiet footer surface than the code body, keep equal vertical padding in both themes, center each marker/text row, and use subdued numbered markers rather than a separate alert or table treatment.
 
 ## Admonitions
 
@@ -166,4 +168,4 @@ The site should feel like a compact developer documentation application: dense, 
 - Category sections use the previous stacked structure: header and description first, project cards below.
 - Desktop guide headings were reduced so generated docs do not overpower the reading view.
 - Programmatic focus on the overview section should not draw a full-page browser outline.
-- Embedded configuration reference pages use injected platform-style typography and tables inside the reference sheet.
+- Embedded configuration reference pages use `embedded-reference.css` for injected platform-style typography and tables inside the reference sheet.

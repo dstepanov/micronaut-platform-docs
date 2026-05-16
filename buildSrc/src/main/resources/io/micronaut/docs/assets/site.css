@@ -20,10 +20,9 @@
     --code-frame-shadow: none;
     --code-tab-text: #566474;
     --code-tab-selected-text: #172026;
-    --code-dependency-bg: var(--code-frame-bg);
-    --code-dependency-border: var(--code-frame-border);
-    --code-dependency-separator: var(--code-frame-separator);
-    --code-dependency-copy-bg: var(--code-frame-copy-bg);
+    --snippet-card-footer-bg: #f8f9fb;
+    --snippet-card-footer-text: #64717f;
+    --snippet-card-footer-marker-bg: #ffffff;
     --shadow: 0 18px 50px rgba(23, 32, 38, 0.08);
     --shell-font: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
@@ -67,10 +66,9 @@ body.dark-mode {
     --code-frame-shadow: none;
     --code-tab-text: #d1d5db;
     --code-tab-selected-text: #ffffff;
-    --code-dependency-bg: var(--code-frame-bg);
-    --code-dependency-border: var(--code-frame-border);
-    --code-dependency-separator: var(--code-frame-separator);
-    --code-dependency-copy-bg: var(--code-frame-copy-bg);
+    --snippet-card-footer-bg: #292929;
+    --snippet-card-footer-text: #c5cbd3;
+    --snippet-card-footer-marker-bg: #333333;
     --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
 }
 
@@ -1533,7 +1531,7 @@ body.dark-mode .theme-icon-sun {
 
 .project-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 12px;
     justify-content: start;
 }
@@ -2436,6 +2434,39 @@ body.dark-mode .theme-icon-sun {
     margin-top: -0.5em;
 }
 
+.guide-document .docs-snippet-card-footer {
+    margin: 0 0 1.25rem;
+    padding: 12px 16px;
+    border: 1px solid var(--code-frame-border);
+    border-top: 1px solid var(--code-frame-separator);
+    border-radius: 0 0 12px 12px;
+    background: var(--snippet-card-footer-bg);
+    color: var(--snippet-card-footer-text);
+}
+
+.guide-document .docs-snippet-card-footer > table {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.guide-document .docs-snippet-card-footer > table > tbody {
+    display: grid;
+    gap: 6px;
+}
+
+.guide-document .docs-snippet-card-footer > table > tbody > tr {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 9px;
+    align-items: center;
+    min-height: 22px;
+    background: transparent;
+}
+
 .guide-document .colist > table tr > td:first-of-type {
     padding: 0 0.75em;
     line-height: 1;
@@ -2443,6 +2474,31 @@ body.dark-mode .theme-icon-sun {
 
 .guide-document .colist > table tr > td:last-of-type {
     padding: 0.25em 0;
+}
+
+.guide-document .docs-snippet-card-footer > table tr > td:first-of-type,
+.guide-document .docs-snippet-card-footer > table tr > td:last-of-type {
+    padding: 0;
+    border: 0;
+}
+
+.guide-document .docs-snippet-card-footer > table tr > td:first-of-type {
+    display: grid;
+    min-height: 22px;
+    place-items: center;
+}
+
+.guide-document .docs-snippet-card-footer > table tr > td:last-of-type {
+    color: var(--snippet-card-footer-text);
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+
+.guide-document .docs-snippet-card-footer p {
+    margin: 0;
+    color: var(--snippet-card-footer-text);
+    font-size: 0.84rem;
+    line-height: 1.5;
 }
 
 .guide-document .guide-section-heading {
@@ -2520,6 +2576,35 @@ body.dark-mode .theme-icon-sun {
 .guide-document pre .conum[data-value] {
     position: relative;
     top: -0.125em;
+}
+
+.guide-document pre b.conum {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5em;
+    height: 1.5em;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--code-text) 12%, transparent);
+    color: var(--code-text) !important;
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.guide-document .docs-snippet-card-footer .conum[data-value] {
+    width: 20px;
+    height: 20px;
+    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    background: var(--snippet-card-footer-marker-bg);
+    color: var(--snippet-card-footer-text) !important;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 18px;
+}
+
+.guide-document .docs-snippet-card-footer .conum[data-value] * {
+    color: var(--snippet-card-footer-text) !important;
 }
 
 .guide-document b.conum * {
@@ -2615,6 +2700,7 @@ body.dark-mode .theme-icon-sun {
     display: none;
 }
 
+.guide-document .docs-snippet-card,
 .guide-document .docs-code-block {
     position: relative;
     margin: 1rem 0 1.25rem;
@@ -2625,6 +2711,12 @@ body.dark-mode .theme-icon-sun {
     box-shadow: var(--code-frame-shadow);
 }
 
+.guide-document .docs-code-block-with-footer {
+    margin-bottom: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
 .guide-document .docs-code-title + .docs-code-block {
     margin-top: 0;
 }
@@ -2633,6 +2725,7 @@ body.dark-mode .theme-icon-sun {
     margin-top: 0;
 }
 
+.guide-document .docs-snippet-card-header,
 .guide-document .docs-code-toolbar {
     display: flex;
     align-items: center;
@@ -2646,20 +2739,16 @@ body.dark-mode .theme-icon-sun {
     line-height: 1.35;
 }
 
-.guide-document .docs-code-dependency-snippet,
-.guide-document .docs-code-block:has(.docs-code-language-icon-gradle),
-.guide-document .docs-code-block:has(.docs-code-language-icon-maven) {
-    background: var(--code-dependency-bg);
-}
-
-.guide-document .docs-code-dependency-snippet .docs-code-toolbar,
-.guide-document .docs-code-block:has(.docs-code-language-icon-gradle) .docs-code-toolbar,
-.guide-document .docs-code-block:has(.docs-code-language-icon-maven) .docs-code-toolbar {
-    background: var(--code-dependency-bg);
+.guide-document .docs-snippet-card-description {
+    color: var(--muted);
+    font-size: 0.84rem;
+    line-height: 1.5;
 }
 
 .guide-document table.tableblock > caption.title,
+.guide-document table.tableblock > .title,
 .guide-document .imageblock > .title,
+.guide-document .docs-snippet-card-title,
 .guide-document .docs-code-title {
     max-width: 100%;
     margin: 1rem 0 0.25rem;
@@ -2674,6 +2763,7 @@ body.dark-mode .theme-icon-sun {
 }
 
 .guide-document table.tableblock > caption.title a,
+.guide-document table.tableblock > .title a,
 .guide-document .imageblock > .title a {
     font-weight: 500;
 }
@@ -2850,6 +2940,7 @@ body.dark-mode .theme-icon-sun {
     margin-left: auto;
 }
 
+.guide-document .docs-snippet-card-action,
 .guide-document .docs-code-copy {
     display: inline-grid;
     flex: 0 0 auto;
@@ -2864,12 +2955,14 @@ body.dark-mode .theme-icon-sun {
     cursor: pointer;
 }
 
+.guide-document .docs-snippet-card-action:hover,
 .guide-document .docs-code-copy:hover,
 .guide-document .docs-code-copy.copied {
     background: var(--code-frame-copy-hover-bg);
     color: var(--text);
 }
 
+.guide-document .docs-snippet-card > .docs-snippet-card-action,
 .guide-document .docs-code-block > .docs-code-copy {
     position: absolute;
     top: 10px;
@@ -2889,32 +2982,16 @@ body.dark-mode .theme-icon-sun {
     stroke-width: 2;
 }
 
+.guide-document .docs-snippet-card-content,
 .guide-document .docs-code-content {
     overflow-x: auto;
     border-top: 0;
     background: var(--code-frame-bg);
 }
 
+.guide-document .docs-snippet-card-header + .docs-snippet-card-content,
 .guide-document .docs-code-toolbar + .docs-code-content {
     border-top: 1px solid var(--code-frame-separator);
-}
-
-.guide-document .docs-code-dependency-snippet .docs-code-content,
-.guide-document .docs-code-block:has(.docs-code-language-icon-gradle) .docs-code-content,
-.guide-document .docs-code-block:has(.docs-code-language-icon-maven) .docs-code-content {
-    background: var(--code-dependency-bg);
-}
-
-.guide-document .docs-code-dependency-snippet .docs-code-toolbar + .docs-code-content,
-.guide-document .docs-code-block:has(.docs-code-language-icon-gradle) .docs-code-toolbar + .docs-code-content,
-.guide-document .docs-code-block:has(.docs-code-language-icon-maven) .docs-code-toolbar + .docs-code-content {
-    border-top-color: var(--code-dependency-separator);
-}
-
-.guide-document .docs-code-dependency-snippet > .docs-code-copy,
-.guide-document .docs-code-block:has(.docs-code-language-icon-gradle) > .docs-code-copy,
-.guide-document .docs-code-block:has(.docs-code-language-icon-maven) > .docs-code-copy {
-    background: var(--code-dependency-copy-bg);
 }
 
 .guide-document .docs-code-content pre,
@@ -3106,6 +3183,29 @@ body.dark-mode .guide-document .conum[data-value] {
     color: #000000 !important;
 }
 
+body.dark-mode .guide-document pre b.conum {
+    background: rgba(255, 255, 255, 0.12);
+    color: #dddddd !important;
+}
+
+body.dark-mode .guide-document .docs-snippet-card-footer {
+    background: var(--snippet-card-footer-bg);
+}
+
+body.dark-mode .guide-document .docs-snippet-card-footer p {
+    color: var(--snippet-card-footer-text);
+}
+
+body.dark-mode .guide-document .docs-snippet-card-footer .conum[data-value] {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: var(--snippet-card-footer-marker-bg) !important;
+    color: var(--snippet-card-footer-text) !important;
+}
+
+body.dark-mode .guide-document .docs-snippet-card-footer .conum[data-value] * {
+    color: var(--snippet-card-footer-text) !important;
+}
+
 body.dark-mode .guide-document .multi-language-selector {
     background: #111111;
 }
@@ -3141,6 +3241,7 @@ body.dark-mode .page-index-link:focus-visible {
     background: rgba(255, 255, 255, 0.06);
 }
 
+body.dark-mode .guide-document .docs-snippet-card,
 body.dark-mode .guide-document .docs-code-block {
     background: var(--code-frame-bg);
     box-shadow: none;
@@ -3156,7 +3257,9 @@ body.dark-mode .guide-document .docs-code-title {
 }
 
 body.dark-mode .guide-document table.tableblock > caption.title,
+body.dark-mode .guide-document table.tableblock > .title,
 body.dark-mode .guide-document .imageblock > .title,
+body.dark-mode .guide-document .docs-snippet-card-title,
 body.dark-mode .guide-document .docs-code-title {
     color: #c7c7c7;
 }
@@ -3223,30 +3326,6 @@ body.dark-mode .guide-document .docs-code-copy.copied {
 body.dark-mode .guide-document .docs-code-block > .docs-code-copy {
     background: var(--code-frame-copy-bg);
     box-shadow: none;
-}
-
-body.dark-mode .guide-document .docs-code-dependency-snippet,
-body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-gradle),
-body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-maven) {
-    background: var(--code-dependency-bg);
-}
-
-body.dark-mode .guide-document .docs-code-dependency-snippet .docs-code-toolbar,
-body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-gradle) .docs-code-toolbar,
-body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-maven) .docs-code-toolbar {
-    background: var(--code-dependency-bg);
-}
-
-body.dark-mode .guide-document .docs-code-dependency-snippet .docs-code-content,
-body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-gradle) .docs-code-content,
-body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-maven) .docs-code-content {
-    background: var(--code-dependency-bg);
-}
-
-body.dark-mode .guide-document .docs-code-dependency-snippet > .docs-code-copy,
-body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-gradle) > .docs-code-copy,
-body.dark-mode .guide-document .docs-code-block:has(.docs-code-language-icon-maven) > .docs-code-copy {
-    background: var(--code-dependency-copy-bg);
 }
 
 body.dark-mode .project-card,

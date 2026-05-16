@@ -83,13 +83,11 @@ final class ModernGuideRenderer {
                 <div class="docs-content">
                 <div class="project">
                     <h1>%s</h1>
-                    <p><strong>Version:</strong> %s</p>
                 </div>
                 """.formatted(
                 html(project.displayName()),
                 html(platformVersion),
-                html(project.displayName()),
-                html(platformVersion)
+                html(project.displayName())
             ));
             try {
                 List<UserGuideNode> chapters = children(guide);
@@ -307,21 +305,25 @@ final class ModernGuideRenderer {
     }
 
     private static String codeBlock(String classes, String title, boolean includeTitle, String pre) {
+        String language = codeLanguage(pre);
         String blockClasses = classes == null || classes.isBlank()
-            ? "listingblock docs-code-block"
-            : "listingblock " + classes + " docs-code-block";
+            ? "listingblock docs-code-block docs-snippet-card"
+            : "listingblock " + classes + " docs-code-block docs-snippet-card";
+        if (language.equals("properties")) {
+            blockClasses += " docs-code-properties-snippet docs-snippet-card-properties";
+        }
         if (isDependencySnippet(pre)) {
-            blockClasses += " docs-code-dependency-snippet";
+            blockClasses += " docs-code-dependency-snippet docs-snippet-card-dependency";
         }
         String outsideTitleHtml = title == null || title.isBlank() || !includeTitle
             ? ""
-            : "<div class=\"docs-code-title\">" + title + "</div>";
-        String copyButton = "<button class=\"docs-code-copy\" type=\"button\" aria-label=\"Copy code\" title=\"Copy code\" data-copy-code>" + copyIcon() + "</button>";
+            : "<div class=\"docs-code-title docs-snippet-card-title\">" + title + "</div>";
+        String copyButton = "<button class=\"docs-code-copy docs-snippet-card-action\" type=\"button\" aria-label=\"Copy code\" title=\"Copy code\" data-copy-code>" + copyIcon() + "</button>";
         return """
             %s
             <div class="%s" data-code-block>
             %s
-            <div class="content docs-code-content">
+            <div class="content docs-code-content docs-snippet-card-content">
             %s
             </div>
             </div>

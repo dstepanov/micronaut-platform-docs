@@ -217,6 +217,17 @@ function codeLanguageTabHtml(language, label) {
     return codeLanguageIcon(language) + "<span class=\"docs-code-language-text\">" + escapeHtml(label) + "</span>";
 }
 
+function applySnippetCardClasses(block) {
+    const code = block?.querySelector("pre code");
+    const language = codeLanguageKey(languageFromCodeElement(code));
+    const dependency = Boolean(block?.classList?.contains("docs-code-dependency-snippet")) || isDependencySnippet(code);
+    block?.classList?.add("docs-snippet-card");
+    block?.classList?.toggle("docs-code-properties-snippet", language === "properties");
+    block?.classList?.toggle("docs-snippet-card-properties", language === "properties");
+    block?.classList?.toggle("docs-code-dependency-snippet", dependency);
+    block?.classList?.toggle("docs-snippet-card-dependency", dependency);
+}
+
 function upgradeCodeBlocks(root) {
     root.querySelectorAll(".listingblock:not([data-code-block])").forEach((block) => {
         const code = block.querySelector("pre code");
@@ -230,7 +241,7 @@ function upgradeCodeBlocks(root) {
         block.dataset.codeBlock = "";
         if (title?.textContent?.trim()) {
             const titleElement = document.createElement("div");
-            titleElement.className = "docs-code-title";
+            titleElement.className = "docs-code-title docs-snippet-card-title";
             titleElement.innerHTML = title.innerHTML.trim();
             if (multiLanguageSample) {
                 block.insertBefore(titleElement, content);
@@ -246,15 +257,23 @@ function upgradeCodeBlocks(root) {
         if (isDependencySnippet(code)) {
             block.classList.add("docs-code-dependency-snippet");
         }
+        applySnippetCardClasses(block);
         const copy = document.createElement("button");
-        copy.className = "docs-code-copy";
+        copy.className = "docs-code-copy docs-snippet-card-action";
         copy.type = "button";
         copy.dataset.copyCode = "";
         copy.title = "Copy code";
         copy.setAttribute("aria-label", "Copy code");
         copy.innerHTML = modernCodeCopyIcon();
         block.insertBefore(copy, content);
-        content.classList.add("docs-code-content");
+        content.classList.add("docs-code-content", "docs-snippet-card-content");
+    });
+    root.querySelectorAll(".docs-code-block[data-code-block]").forEach((block) => {
+        applySnippetCardClasses(block);
+        block.querySelector(":scope > .docs-code-copy")?.classList.add("docs-snippet-card-action");
+        block.querySelector(":scope > .docs-code-content")?.classList.add("docs-snippet-card-content");
+        block.previousElementSibling?.classList?.contains("docs-code-title") && block.previousElementSibling.classList.add("docs-snippet-card-title");
+        block.querySelector(":scope > .docs-code-title")?.classList.add("docs-snippet-card-title");
     });
 }
 
@@ -388,6 +407,30 @@ function syncMultiLanguageTabs(root) {
     });
 }
 
+function syncSnippetCardFooters(root) {
+    root.querySelectorAll(".docs-code-block-with-footer").forEach((block) => {
+        block.classList.remove("docs-code-block-with-footer");
+    });
+    root.querySelectorAll(".colist.docs-snippet-card-footer").forEach((footer) => {
+        footer.classList.remove("docs-snippet-card-footer", "docs-code-callouts");
+    });
+    root.querySelectorAll(".colist").forEach((footer) => {
+        let previous = footer.previousElementSibling;
+        while (previous && (
+            previous.classList.contains("docs-code-block")
+            || previous.classList.contains("multi-language-sample")
+            || previous.classList.contains("multi-language-selector")
+        )) {
+            if (previous.classList.contains("docs-code-block") && !previous.classList.contains("hidden")) {
+                previous.classList.add("docs-code-block-with-footer");
+                footer.classList.add("docs-snippet-card-footer", "docs-code-callouts");
+                break;
+            }
+            previous = previous.previousElementSibling;
+        }
+    });
+}
+
 function setMultiLanguageSelectorLanguage(selector, language) {
     const samples = multiLanguageSamplesForSelector(selector);
     if (!samples.length) {
@@ -406,6 +449,7 @@ function setMultiLanguageSelectorLanguage(selector, language) {
         sample.classList.toggle("hidden", sample !== visibleSample);
     });
     syncMultiLanguageTabs(selector.parentElement || document);
+    syncSnippetCardFooters(selector.parentElement || document);
 }
 
 function integrateMultiLanguageTabs(root) {
@@ -425,9 +469,10 @@ function integrateMultiLanguageTabs(root) {
             let titleElement = selector.previousElementSibling;
             if (!titleElement?.classList?.contains("docs-code-title")) {
                 titleElement = document.createElement("div");
-                titleElement.className = "docs-code-title";
+                titleElement.className = "docs-code-title docs-snippet-card-title";
                 selector.parentNode?.insertBefore(titleElement, selector);
             }
+            titleElement.classList.add("docs-snippet-card-title");
             titleElement.innerHTML = titleHtml;
         }
         if (!selector.dataset.docsTabsId) {
@@ -445,7 +490,7 @@ function integrateMultiLanguageTabs(root) {
             let toolbar = sample.querySelector(":scope > .docs-code-toolbar");
             if (!toolbar) {
                 toolbar = document.createElement("div");
-                toolbar.className = "docs-code-toolbar";
+                toolbar.className = "docs-code-toolbar docs-snippet-card-header";
                 const copy = sample.querySelector(":scope > .docs-code-copy");
                 const content = sample.querySelector(":scope > .docs-code-content");
                 sample.insertBefore(toolbar, content);
@@ -453,6 +498,7 @@ function integrateMultiLanguageTabs(root) {
                     toolbar.appendChild(copy);
                 }
             }
+            toolbar.classList.add("docs-snippet-card-header");
             let tabs = toolbar.querySelector(":scope > .docs-code-tabs");
             if (!tabs) {
                 tabs = document.createElement("div");
@@ -1038,6 +1084,7 @@ function hydrateGuideDocument(article) {
         if (typeof postProcessCodeCallouts === "function") {
             postProcessCodeCallouts();
         }
+        syncSnippetCardFooters(article);
     } catch (errorValue) {
         console.warn("Documentation loaded, but post-processing failed.", errorValue);
     }
