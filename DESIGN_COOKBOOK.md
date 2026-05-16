@@ -17,7 +17,9 @@ The site should feel like a compact developer documentation application: dense, 
 
 - Main page styling belongs in `buildSrc/src/main/resources/io/micronaut/docs/assets/site.css`.
 - Application shell markup belongs in Handlebars templates under `buildSrc/src/main/resources/io/micronaut/docs/templates`.
-- Rendered guide markup comes from `ModernGuideRenderer` and must be styled through `.guide-document` selectors.
+- Rendered guide markup comes from `ModernGuideRenderer` and `PlatformGuideHtmlRenderer` and must be styled through `.guide-document` selectors.
+- Guide structure comes from `GuideToc`, the platform-owned `toc.yml` source index. Use it for section numbers, sidebar entries, page-index entries, search section entries, and renderer traversal instead of parsing generated HTML or depending on old Micronaut build internal TOC classes.
+- Macro-specific guide HTML for snippets, dependencies, configuration samples, admonitions, and callout markers should be emitted directly by `PlatformGuideHtmlRenderer` through the docs plugin `Renderer` API. Do not style around a second pass that parses already-rendered HTML.
 - Embedded API and configuration reference pages are styled only through iframe-injected CSS loaded from `buildSrc/src/main/resources/io/micronaut/docs/assets/embedded-reference.css` by `GeneratePlatformDocsTask`.
 - Generated `index.html` must import only `platform-assets/site.css` for the platform shell. Do not import old guide CSS, Javadoc CSS, or configuration-reference CSS into the main page.
 
@@ -98,12 +100,13 @@ The site should feel like a compact developer documentation application: dense, 
 
 - Single-language snippets show code plus copy action only. Do not add language badges, bottom-right labels, or decorative headers.
 - Multi-language snippets use tabs as controls for equivalent variants.
+- Language snippet samples arrive as resolved raw source from the docs plugin DTOs. The platform renderer owns source-to-HTML escaping and callout marker markup, while Shiki owns static token colors after rendering.
 - Real snippet titles sit outside the code frame.
 - Unknown `[source]` snippets remain plaintext and must not be labeled Bash.
 - Shiki is static build-time highlighting only. Do not add runtime syntax highlighters.
-- Code frames separate from the guide background with a neutral frame surface plus a quiet 1px outer border. The light border is visible but soft; the dark border should be nearly invisible and subordinate to the darker frame background. Do not add shadows.
-- Code, properties, and dependency snippets share the same shadcn-style card structure: `.docs-snippet-card` maps to Card, `.docs-snippet-card-header` to CardHeader, `.docs-snippet-card-title` to CardTitle, `.docs-snippet-card-action` to CardAction, `.docs-snippet-card-content` to CardContent, and `.docs-snippet-card-footer` to CardFooter. Keep these as the styling owners and treat `docs-code-*` classes as compatibility and behavior hooks.
-- Dependency snippets and properties snippets share the same background, separator, and copy-button surface tokens as normal code snippets in both light and dark mode. Gradle, Maven, and Properties tabs should not introduce a second color system.
+- Code frames separate from the guide background with a neutral frame surface plus a quiet 1px outer border. The light border is visible but soft; the dark border should be nearly invisible and subordinate to the darker frame background. Snippet cards do not use shadows.
+- Code, properties, and dependency snippets share the same shadcn-style card structure: `.docs-snippet-card` maps to Card, `.docs-snippet-card-header` to CardHeader, `.docs-snippet-card-title` to CardTitle, `.docs-snippet-card-action` to CardAction, `.docs-snippet-card-content` to CardContent, and `.docs-snippet-card-footer` to CardFooter. Keep these `docs-snippet-card-*` classes and `--snippet-card-*` tokens as the styling owners; treat `docs-code-*` classes as compatibility and behavior hooks for copying, tab hydration, and static highlighting.
+- Dependency snippets and properties snippets share the same background, border, separator, action, and footer token set as normal code snippets in both light and dark mode. Gradle, Maven, and Properties tabs should not introduce a second color system or separate card palette.
 - Tabs and code frames use the same neutral family. Keep a single split line between the tab row and code body: visible in light mode, almost invisible in dark mode. Tab labels should use compact system-sans typography around `12px / 16px`, regular weight, with only a modest selected-weight increase, and inactive labels must still meet readable contrast in both themes.
 - Language icons in code tabs inherit the tab text color. Keep them gray and monochrome so tabs read as quiet controls, not a strip of brand badges.
 - Code language icons are generated from SVG resources. Brand icons live under `assets/icons/brands`; project-owned generic format icons live under `assets/icons/languages`. Do not add fallback SVG path data to JavaScript templates.
@@ -116,6 +119,7 @@ The site should feel like a compact developer documentation application: dense, 
 ## Admonitions
 
 - Admonitions stay in document flow and keep content left aligned.
+- Renderer-owned admonitions use `.docs-admonition-card`, `.docs-admonition-card-layout`, `.docs-admonition-card-icon`, and `.docs-admonition-card-content` as component hooks while preserving the docs-engine table structure for compatibility.
 - Use one calm icon, neutral background, and subtle accent color. Note, important, warning, and caution may have different icon accents, but the container stays low saturation.
 - Light-mode tips use the most neutral callout treatment: a near-transparent dark tint, soft neutral 1px border, larger radius, compact padding, and smaller readable text. They should read like quiet inline guidance, not a green status panel.
 - Avoid saturated status panels and colorful backgrounds unless severity demands it.

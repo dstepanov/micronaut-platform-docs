@@ -1,0 +1,196 @@
+:root {
+    color-scheme: light;
+    --platform-reference-bg: #ffffff;
+    --platform-reference-page: #f7f9fb;
+    --platform-reference-text: #172026;
+    --platform-reference-muted: #5d6b78;
+    --platform-reference-line: #d8e1e7;
+    --platform-reference-soft-line: #e7edf2;
+    --platform-reference-accent: #00a676;
+    --platform-reference-link: #1565c0;
+    --platform-reference-code-bg: #f7f7f8;
+    --platform-reference-zebra: #fbfcfd;
+    --platform-reference-font: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --platform-reference-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+html {
+    scroll-padding-top: 16px;
+    background: var(--platform-reference-bg);
+}
+
+body {
+    margin: 0 !important;
+    background: var(--platform-reference-bg);
+    color: var(--platform-reference-text);
+    font-family: var(--platform-reference-font);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.6;
+    letter-spacing: 0;
+    text-rendering: optimizeLegibility;
+}
+
+#navigation,
+header[role="banner"],
+nav.toc {
+    display: none !important;
+}
+
+#main,
+.main-grid {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+#main > .docs-content,
+.docs-content,
+main[role="main"] {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 28px 32px 40px !important;
+    background: var(--platform-reference-bg);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    margin: 1.1em 0 0.45em;
+    color: var(--platform-reference-text);
+    font-family: var(--platform-reference-font);
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.18;
+    word-spacing: normal;
+}
+
+h1 {
+    margin-top: 0;
+    font-size: clamp(2rem, 4vw, 2.6rem);
+}
+
+h2 {
+    font-size: 1.55rem;
+}
+
+h3 {
+    font-size: 1.25rem;
+}
+
+p,
+li,
+dd,
+td,
+th {
+    color: var(--platform-reference-text);
+    font-family: var(--platform-reference-font);
+    font-size: 1rem;
+    line-height: 1.6;
+    word-spacing: normal;
+}
+
+p {
+    margin: 0 0 1rem;
+}
+
+a {
+    color: var(--platform-reference-link);
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.18em;
+}
+
+code,
+pre {
+    font-family: var(--platform-reference-mono);
+    font-size: 0.9rem;
+}
+
+:not(pre) > code {
+    padding: 0.08em 0.35em;
+    border-radius: 4px;
+    background: var(--platform-reference-code-bg);
+    color: var(--platform-reference-text);
+}
+
+table {
+    width: 100%;
+    max-width: 100%;
+    margin: 1rem 0 1.5rem;
+    overflow: hidden;
+    border: 1px solid var(--platform-reference-line);
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 8px;
+    background: var(--platform-reference-bg);
+}
+
+caption.title,
+table > .title {
+    max-width: 100%;
+    margin: 1rem 0 0.25rem;
+    padding: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--platform-reference-text) 58%, var(--platform-reference-muted));
+    font-family: var(--platform-reference-font);
+    font-size: 0.82rem;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 1.45;
+    text-align: left;
+    white-space: normal;
+}
+
+caption.title a,
+table > .title a {
+    font-weight: 500;
+}
+
+thead,
+tfoot {
+    background: var(--platform-reference-page);
+}
+
+th,
+td {
+    padding: 0.625rem 0.75rem;
+    border-right: 1px solid var(--platform-reference-soft-line);
+    border-bottom: 1px solid var(--platform-reference-soft-line);
+    text-align: left;
+    vertical-align: top;
+}
+
+th:last-child,
+td:last-child {
+    border-right: 0;
+}
+
+tr:last-child > th,
+tr:last-child > td {
+    border-bottom: 0;
+}
+
+tbody tr:nth-child(even) td {
+    background: var(--platform-reference-zebra);
+}
+
+pre {
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 1rem;
+    border: 1px solid var(--platform-reference-line);
+    border-radius: 8px;
+    background: var(--platform-reference-code-bg);
+}
+
+tr:target {
+    outline: 2px solid var(--platform-reference-accent);
+    outline-offset: -2px;
+}
+
+tr:target td {
+    background: rgba(0, 166, 118, 0.12) !important;
+}

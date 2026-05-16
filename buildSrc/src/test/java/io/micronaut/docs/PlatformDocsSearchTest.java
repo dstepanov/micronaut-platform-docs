@@ -795,9 +795,6 @@ final class PlatformDocsSearchTest {
     }
 
     private static Playwright createPlaywright() {
-        if (System.getProperty("platformDocs.browserExecutable", "").isBlank()) {
-            return Playwright.create();
-        }
         return Playwright.create(new Playwright.CreateOptions()
             .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")));
     }

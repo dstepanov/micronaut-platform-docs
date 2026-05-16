@@ -17,7 +17,6 @@ import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
-import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,7 +33,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.jar.JarInputStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -42,12 +40,10 @@ import java.util.stream.Collectors;
 public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String TEMPLATE_ROOT = "/io/micronaut/docs/templates";
     private static final String SITE_ASSET_PATH = "platform-assets";
-    private static final String GUIDE_THEME_ASSET_PATH = "guide-assets";
     private static final String OVERVIEW_SECTION_ID = "platform";
     private static final String CATEGORY_COUNT = "category.count";
     private static final int CARD_DESCRIPTION_MIN_WORDS = 24;
     private static final int CARD_DESCRIPTION_MAX_WORDS = 30;
-    private static final String GUIDE_THEME_RESOURCE = "grails-doc-files.jar";
     private static final String SITE_CSS_RESOURCE = "/io/micronaut/docs/assets/site.css";
     private static final String LOGO_BLACK_RESOURCE = "/io/micronaut/docs/assets/logos/micronaut-horizontal-black.svg";
     private static final String LOGO_WHITE_RESOURCE = "/io/micronaut/docs/assets/logos/micronaut-horizontal-white.svg";
@@ -56,8 +52,6 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final String LANGUAGE_ICON_RESOURCE_ROOT = "/io/micronaut/docs/assets/icons/languages/";
     private static final String LUCIDE_PROPERTIES_RESOURCE = "META-INF/maven/org.webjars.npm/lucide-static/pom.properties";
     private static final String LUCIDE_ICON_ROOT = "META-INF/resources/webjars/lucide-static/%s/icons/";
-    private static final Set<String> GUIDE_THEME_DIRECTORIES = Set.of("css/", "fonts/", "img/default/", "js/", "style/");
-    private static final Set<String> GENERATED_DOC_THEME_DIRECTORIES = Set.of("css/", "fonts/", "js/", "style/");
     private static final Set<String> CONTENT_SEARCH_STOP_WORDS = Set.of(
         "about", "above", "after", "again", "against", "also", "another", "because", "before", "being", "below",
         "between", "cannot", "could", "does", "doing", "during", "each", "either", "example", "first", "following",
@@ -136,18 +130,15 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         Properties descriptions = readDescriptionCatalog();
         Properties projectIcons = readIconCatalog();
         List<ProjectCategory> categories = readCategoryCatalog();
-        getLogger().quiet("Copying shared Micronaut guide theme assets.");
-        copyGuideThemeAssets(outputDirectory);
         List<GuideDocument> documents = new ArrayList<>();
         int index = 0;
         for (GuideProject project : projects) {
-            Path guideHtml = projectDirectory.resolve(project.guideIndexPath());
-            if (!Files.isRegularFile(guideHtml)) {
-                throw new IOException("Missing generated guide HTML for " + project.displayName() + ": " + guideHtml
-                    + ". Run ./gradlew -q buildPlatformGuideDocs first.");
+            getLogger().quiet("[{}/{}] Rendering {}.", ++index, projects.size(), project.displayName());
+            if (copyGeneratedDocs(projectDirectory, outputDirectory, project)) {
+                getLogger().quiet("[{}/{}] Copied {} API and configuration reference output.", index, projects.size(), project.displayName());
+            } else {
+                getLogger().quiet("[{}/{}] No generated reference output found for {}; guide content will still be rendered from sources.", index, projects.size(), project.displayName());
             }
-            getLogger().quiet("[{}/{}] Reading and copying {}.", ++index, projects.size(), project.displayName());
-            copyGeneratedDocs(projectDirectory, outputDirectory, project);
             String platformVersion = platformVersions.get(project.platformVersionKey());
             String html = readOrRenderProjectGuideHtml(projectDirectory, project, platformVersion, index, projects.size());
             documents.add(parseGuide(project, html, projectDirectory.resolve(project.tocPath()), platformVersions.get(project.platformVersionKey())));
@@ -316,63 +307,15 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return new TocItem(0, "", "Docs", "docs", projectAnchor(project));
     }
 
-    private static void copyGeneratedDocs(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {
+    private static boolean copyGeneratedDocs(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {
         Path sourceDirectory = projectDirectory.resolve(project.generatedDocsPath());
         if (!Files.isDirectory(sourceDirectory)) {
-            throw new IOException("Missing generated docs directory for " + project.displayName() + ": " + sourceDirectory);
+            return false;
         }
 
         Path targetDirectory = outputDirectory.resolve("assets").resolve(project.slug()).resolve("docs");
         copyDirectory(sourceDirectory, targetDirectory);
-    }
-
-    private static void copyGuideThemeAssets(Path outputDirectory) throws IOException {
-        Path targetDirectory = outputDirectory.resolve(GUIDE_THEME_ASSET_PATH);
-        Files.createDirectories(targetDirectory);
-        try (InputStream input = GeneratePlatformDocsTask.class.getClassLoader().getResourceAsStream(GUIDE_THEME_RESOURCE)) {
-            if (input == null) {
-                throw new IOException("Missing Micronaut guide resource " + GUIDE_THEME_RESOURCE
-                    + ". The buildSrc classpath must contain the Micronaut docs build plugin jar from gradle/build-plugin.");
-            }
-            try (JarInputStream jar = new JarInputStream(input)) {
-                var entry = jar.getNextJarEntry();
-                while (entry != null) {
-                    String name = entry.getName();
-                    if (!entry.isDirectory() && isGuideThemeAsset(name)) {
-                        Path target = targetDirectory.resolve(name).normalize();
-                        if (!target.startsWith(targetDirectory)) {
-                            throw new IOException("Refusing to copy guide theme asset outside target directory: " + name);
-                        }
-                        Files.createDirectories(target.getParent());
-                        Files.copy(jar, target, StandardCopyOption.REPLACE_EXISTING);
-                    }
-                    entry = jar.getNextJarEntry();
-                }
-            }
-        }
-        guardMultiLanguageHighlightCalls(targetDirectory.resolve("js/multi-language-sample.js"));
-    }
-
-    private static void guardMultiLanguageHighlightCalls(Path script) throws IOException {
-        if (!Files.isRegularFile(script)) {
-            return;
-        }
-        String content = Files.readString(script, StandardCharsets.UTF_8);
-        String guarded = content.replace(
-            "hljs.highlightBlock(codeEl);",
-            "if (window.hljs && typeof hljs.highlightBlock === \"function\") { hljs.highlightBlock(codeEl); }"
-        );
-        if (!guarded.equals(content)) {
-            Files.writeString(script, guarded, StandardCharsets.UTF_8);
-        }
-    }
-
-    private static boolean isGuideThemeAsset(String relativePath) {
-        String normalized = relativePath.replace('\\', '/');
-        return GUIDE_THEME_DIRECTORIES.stream().anyMatch(normalized::startsWith)
-            || normalized.equals("img/micronaut-logo-white.svg")
-            || normalized.equals("img/note.gif")
-            || normalized.equals("img/warning.gif");
+        return true;
     }
 
     private static String renderProjectGuideHtml(
@@ -481,14 +424,6 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return result.toString();
     }
 
-    private static boolean isGeneratedDocsThemeAsset(String relativePath) {
-        return GENERATED_DOC_THEME_DIRECTORIES.stream().anyMatch(relativePath::startsWith)
-            || relativePath.equals("img/micronaut-logo-white.svg")
-            || relativePath.equals("img/note.gif")
-            || relativePath.equals("img/warning.gif")
-            || relativePath.startsWith("img/default/");
-    }
-
     private static void deleteDirectory(Path directory) throws IOException {
         if (!Files.exists(directory)) {
             return;
@@ -512,54 +447,17 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         if (!Files.isRegularFile(tocFile)) {
             throw new IOException("Missing TOC YAML for " + project.displayName() + ": " + tocFile);
         }
-        Object parsed;
-        try (InputStream input = Files.newInputStream(tocFile)) {
-            parsed = new Yaml().load(input);
-        }
-        if (!(parsed instanceof Map<?, ?> toc)) {
-            throw new IOException("TOC YAML for " + project.displayName() + " must be a map: " + tocFile);
-        }
-        List<TocItem> items = new ArrayList<>();
-        appendTocItems(project, items, toc, 0, "");
-        return items;
-    }
-
-    private static void appendTocItems(GuideProject project, List<TocItem> items, Map<?, ?> toc, int level, String numberPrefix) {
-        int index = 1;
-        for (Map.Entry<?, ?> entry : toc.entrySet()) {
-            String id = tocKey(entry.getKey());
-            if ("title".equals(id)) {
-                continue;
-            }
-            String number = numberPrefix.isBlank() ? Integer.toString(index) : numberPrefix + "." + index;
-            Object value = entry.getValue();
-            items.add(new TocItem(level, escapeHtml(number), escapeHtml(tocTitle(project, id, value)), id, project.slug() + "-" + id));
-            if (value instanceof Map<?, ?> children) {
-                appendTocItems(project, items, children, level + 1, number);
-            }
-            index++;
-        }
-    }
-
-    private static String tocKey(Object key) {
-        if (key instanceof String id && !id.isBlank()) {
-            return id;
-        }
-        throw new IllegalArgumentException("TOC section keys must be non-blank strings.");
-    }
-
-    private static String tocTitle(GuideProject project, String id, Object value) {
-        if (value instanceof String title && !title.isBlank()) {
-            return title.trim();
-        }
-        if (value instanceof Map<?, ?> children) {
-            Object title = children.get("title");
-            if (title instanceof String text && !text.isBlank()) {
-                return text.trim();
-            }
-            throw new IllegalArgumentException("TOC section '" + id + "' for " + project.displayName() + " must define a non-blank title.");
-        }
-        throw new IllegalArgumentException("TOC section '" + id + "' for " + project.displayName() + " must be a string or map.");
+        return GuideToc.read(tocFile)
+            .entries()
+            .stream()
+            .map(entry -> new TocItem(
+                entry.level(),
+                escapeHtml(entry.number()),
+                escapeHtml(entry.title()),
+                entry.id(),
+                project.slug() + "-" + entry.id()
+            ))
+            .toList();
     }
 
     private static String extractDocsContent(String html) {
@@ -764,7 +662,6 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         String defaultProject = documents.get(0).project().slug();
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("assetPath", SITE_ASSET_PATH);
-        model.put("guideAssetPath", GUIDE_THEME_ASSET_PATH);
         model.put("defaultProject", defaultProject);
         model.put("overviewSectionId", OVERVIEW_SECTION_ID);
         model.put("platform", platformModel(projectDirectory));

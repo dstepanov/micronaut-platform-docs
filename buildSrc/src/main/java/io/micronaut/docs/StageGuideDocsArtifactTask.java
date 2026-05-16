@@ -84,12 +84,14 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
         int index = 0;
         for (GuideProject project : selectedProjects) {
             Path sourceDirectory = projectDirectory.resolve(project.generatedDocsPath());
-            if (!Files.isDirectory(sourceDirectory)) {
-                throw new IOException("Missing generated docs directory for " + project.displayName() + ": " + sourceDirectory);
+            getLogger().quiet("[{}/{}] Staging {} platform guide fragment.", ++index, selectedProjects.size(), project.displayName());
+            if (Files.isDirectory(sourceDirectory)) {
+                Path targetDirectory = outputDirectory.resolve(project.generatedDocsPath());
+                copyDirectory(sourceDirectory, targetDirectory);
+                getLogger().quiet("[{}/{}] Staged {} API and configuration reference output.", index, selectedProjects.size(), project.displayName());
+            } else {
+                getLogger().quiet("[{}/{}] No generated reference output found for {}; skipping reference assets.", index, selectedProjects.size(), project.displayName());
             }
-            Path targetDirectory = outputDirectory.resolve(project.generatedDocsPath());
-            getLogger().quiet("[{}/{}] Staging {} docs.", ++index, selectedProjects.size(), project.displayName());
-            copyDirectory(sourceDirectory, targetDirectory);
             copyToc(projectDirectory, outputDirectory, project);
             renderPlatformGuide(projectDirectory, outputDirectory, project, platformVersions);
         }

@@ -20,6 +20,13 @@
     --code-frame-shadow: none;
     --code-tab-text: #566474;
     --code-tab-selected-text: #172026;
+    --snippet-card-bg: var(--code-frame-bg);
+    --snippet-card-border: var(--code-frame-border);
+    --snippet-card-separator: var(--code-frame-separator);
+    --snippet-card-action-bg: var(--code-frame-copy-bg);
+    --snippet-card-action-hover-bg: var(--code-frame-copy-hover-bg);
+    --snippet-card-action-shadow: 0 1px 2px rgba(23, 32, 38, 0.08);
+    --snippet-card-shadow: var(--code-frame-shadow);
     --snippet-card-footer-bg: #f8f9fb;
     --snippet-card-footer-text: #64717f;
     --snippet-card-footer-marker-bg: #ffffff;
@@ -66,6 +73,13 @@ body.dark-mode {
     --code-frame-shadow: none;
     --code-tab-text: #d1d5db;
     --code-tab-selected-text: #ffffff;
+    --snippet-card-bg: var(--code-frame-bg);
+    --snippet-card-border: var(--code-frame-border);
+    --snippet-card-separator: var(--code-frame-separator);
+    --snippet-card-action-bg: var(--code-frame-copy-bg);
+    --snippet-card-action-hover-bg: var(--code-frame-copy-hover-bg);
+    --snippet-card-action-shadow: none;
+    --snippet-card-shadow: var(--code-frame-shadow);
     --snippet-card-footer-bg: #292929;
     --snippet-card-footer-text: #c5cbd3;
     --snippet-card-footer-marker-bg: #333333;
@@ -2218,7 +2232,7 @@ body.dark-mode .theme-icon-sun {
     --admonition-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.5 14.5A3.5 3.5 0 0 0 12 22a3.5 3.5 0 0 0 3.5-7.5c-.3 1-1.3 1.5-2.2.9-1.4-.9-.3-3.4.2-4.9.5-1.8-.2-3.9-1.7-5.3A7.8 7.8 0 0 0 10 12c-1.2-.8-1.7-2.3-1.2-3.9A7.7 7.7 0 0 0 4 15a8 8 0 0 0 16 0c0-3.2-1.9-6-4.7-7.3'/%3E%3C/svg%3E");
 }
 
-.guide-document .admonitionblock > table {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) {
     width: 100%;
     overflow: hidden;
     border: 1px solid var(--admonition-border);
@@ -2228,16 +2242,16 @@ body.dark-mode .theme-icon-sun {
     box-shadow: none;
 }
 
-.guide-document .admonitionblock.tip > table {
+.guide-document .admonitionblock.tip > :where(.docs-admonition-card-layout, table) {
     border-radius: 16px;
 }
 
-.guide-document .admonitionblock > table > tbody,
-.guide-document .admonitionblock > table > tbody > tr {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) > tbody,
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) > tbody > tr {
     display: block;
 }
 
-.guide-document .admonitionblock > table > tbody > tr {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) > tbody > tr {
     display: grid;
     grid-template-columns: 22px minmax(0, 1fr);
     gap: 12px;
@@ -2246,24 +2260,24 @@ body.dark-mode .theme-icon-sun {
     background: transparent;
 }
 
-.guide-document .admonitionblock.tip > table > tbody > tr {
+.guide-document .admonitionblock.tip > :where(.docs-admonition-card-layout, table) > tbody > tr {
     padding: 0.75rem 1rem;
 }
 
-.guide-document .admonitionblock > table td.icon,
-.guide-document .admonitionblock > table td.content {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-icon, td.icon),
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) {
     display: block;
     padding: 0;
     border: 0;
     background: transparent;
 }
 
-.guide-document .admonitionblock.tip > table td.content {
+.guide-document .admonitionblock.tip > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) {
     font-size: 0.875rem;
     line-height: 1.65;
 }
 
-.guide-document .admonitionblock > table td.icon {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-icon, td.icon) {
     grid-column: 1;
     grid-row: 1;
     width: 22px;
@@ -2273,7 +2287,7 @@ body.dark-mode .theme-icon-sun {
     text-align: left;
 }
 
-.guide-document .admonitionblock > table td.icon .fa {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-icon, td.icon) .fa {
     display: block;
     width: 20px;
     height: 20px;
@@ -2282,7 +2296,7 @@ body.dark-mode .theme-icon-sun {
     font-style: normal;
 }
 
-.guide-document .admonitionblock > table td.icon .fa::before {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-icon, td.icon) .fa::before {
     display: block;
     width: 20px;
     height: 20px;
@@ -2292,7 +2306,7 @@ body.dark-mode .theme-icon-sun {
     -webkit-mask: var(--admonition-icon) center / contain no-repeat;
 }
 
-.guide-document .admonitionblock > table td.content {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) {
     grid-column: 2;
     grid-row: 1;
     min-width: 0;
@@ -2305,7 +2319,7 @@ body.dark-mode .theme-icon-sun {
     word-spacing: normal;
 }
 
-.guide-document .admonitionblock > table td.content > .title {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) > .title {
     margin: 0 0 0.4rem;
     color: var(--admonition-text);
     font-family: inherit;
@@ -2316,7 +2330,7 @@ body.dark-mode .theme-icon-sun {
     text-align: left;
 }
 
-.guide-document .admonitionblock > table td.content p {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) p {
     margin-bottom: 0.75rem;
     font-size: inherit;
     line-height: inherit;
@@ -2324,7 +2338,7 @@ body.dark-mode .theme-icon-sun {
     text-align-last: auto;
 }
 
-.guide-document .admonitionblock > table td.content :not(pre) > code {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) :not(pre) > code {
     padding: 0.08em 0.35em;
     border-radius: 4px;
     background-color: var(--admonition-code-bg);
@@ -2332,12 +2346,12 @@ body.dark-mode .theme-icon-sun {
     font-size: 0.95em;
 }
 
-.guide-document .admonitionblock > table td.content a {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) a {
     color: var(--admonition-link) !important;
 }
 
-.guide-document .admonitionblock > table td.content > :last-child,
-.guide-document .admonitionblock > table td.content > :last-child > :last-child {
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) > :last-child,
+.guide-document .admonitionblock > :where(.docs-admonition-card-layout, table) :where(.docs-admonition-card-content, td.content) > :last-child > :last-child {
     margin-bottom: 0;
 }
 
@@ -2437,8 +2451,8 @@ body.dark-mode .theme-icon-sun {
 .guide-document .docs-snippet-card-footer {
     margin: 0 0 1.25rem;
     padding: 12px 16px;
-    border: 1px solid var(--code-frame-border);
-    border-top: 1px solid var(--code-frame-separator);
+    border: 1px solid var(--snippet-card-border);
+    border-top: 1px solid var(--snippet-card-separator);
     border-radius: 0 0 12px 12px;
     background: var(--snippet-card-footer-bg);
     color: var(--snippet-card-footer-text);
@@ -2700,15 +2714,14 @@ body.dark-mode .theme-icon-sun {
     display: none;
 }
 
-.guide-document .docs-snippet-card,
-.guide-document .docs-code-block {
+.guide-document :where(.docs-snippet-card, .docs-code-block) {
     position: relative;
     margin: 1rem 0 1.25rem;
     overflow: hidden;
-    border: 1px solid var(--code-frame-border);
+    border: 1px solid var(--snippet-card-border);
     border-radius: 12px;
-    background: var(--code-frame-bg);
-    box-shadow: var(--code-frame-shadow);
+    background: var(--snippet-card-bg);
+    box-shadow: var(--snippet-card-shadow);
 }
 
 .guide-document .docs-code-block-with-footer {
@@ -2725,15 +2738,14 @@ body.dark-mode .theme-icon-sun {
     margin-top: 0;
 }
 
-.guide-document .docs-snippet-card-header,
-.guide-document .docs-code-toolbar {
+.guide-document :where(.docs-snippet-card-header, .docs-code-toolbar) {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
     min-height: 43px;
     padding: 8px 10px;
-    background: var(--code-frame-bg);
+    background: var(--snippet-card-bg);
     color: var(--code-tab-text);
     font-size: 0.75rem;
     line-height: 1.35;
@@ -2748,8 +2760,7 @@ body.dark-mode .theme-icon-sun {
 .guide-document table.tableblock > caption.title,
 .guide-document table.tableblock > .title,
 .guide-document .imageblock > .title,
-.guide-document .docs-snippet-card-title,
-.guide-document .docs-code-title {
+.guide-document :where(.docs-snippet-card-title, .docs-code-title) {
     max-width: 100%;
     margin: 1rem 0 0.25rem;
     padding: 0;
@@ -2940,8 +2951,7 @@ body.dark-mode .theme-icon-sun {
     margin-left: auto;
 }
 
-.guide-document .docs-snippet-card-action,
-.guide-document .docs-code-copy {
+.guide-document :where(.docs-snippet-card-action, .docs-code-copy) {
     display: inline-grid;
     flex: 0 0 auto;
     place-items: center;
@@ -2955,21 +2965,19 @@ body.dark-mode .theme-icon-sun {
     cursor: pointer;
 }
 
-.guide-document .docs-snippet-card-action:hover,
-.guide-document .docs-code-copy:hover,
+.guide-document :where(.docs-snippet-card-action, .docs-code-copy):hover,
 .guide-document .docs-code-copy.copied {
-    background: var(--code-frame-copy-hover-bg);
+    background: var(--snippet-card-action-hover-bg);
     color: var(--text);
 }
 
-.guide-document .docs-snippet-card > .docs-snippet-card-action,
-.guide-document .docs-code-block > .docs-code-copy {
+.guide-document :where(.docs-snippet-card, .docs-code-block) > :where(.docs-snippet-card-action, .docs-code-copy) {
     position: absolute;
     top: 10px;
     right: 10px;
     z-index: 3;
-    background: var(--code-frame-copy-bg);
-    box-shadow: 0 1px 2px rgba(23, 32, 38, 0.08);
+    background: var(--snippet-card-action-bg);
+    box-shadow: var(--snippet-card-action-shadow);
 }
 
 .guide-document .docs-code-copy svg {
@@ -2982,16 +2990,14 @@ body.dark-mode .theme-icon-sun {
     stroke-width: 2;
 }
 
-.guide-document .docs-snippet-card-content,
-.guide-document .docs-code-content {
+.guide-document :where(.docs-snippet-card-content, .docs-code-content) {
     overflow-x: auto;
     border-top: 0;
-    background: var(--code-frame-bg);
+    background: var(--snippet-card-bg);
 }
 
-.guide-document .docs-snippet-card-header + .docs-snippet-card-content,
-.guide-document .docs-code-toolbar + .docs-code-content {
-    border-top: 1px solid var(--code-frame-separator);
+.guide-document :where(.docs-snippet-card-header, .docs-code-toolbar) + :where(.docs-snippet-card-content, .docs-code-content) {
+    border-top: 1px solid var(--snippet-card-separator);
 }
 
 .guide-document .docs-code-content pre,
@@ -3151,18 +3157,6 @@ body.dark-mode .guide-document .admonitionblock.caution {
     --admonition-accent: #dea28b;
 }
 
-body.dark-mode .guide-document .admonitionblock > table {
-    box-shadow: none;
-}
-
-body.dark-mode .guide-document .admonitionblock > table td.content {
-    color: var(--admonition-text);
-}
-
-body.dark-mode .guide-document .admonitionblock > table td.content > .title {
-    color: var(--admonition-text);
-}
-
 body.dark-mode .guide-document .exampleblock > .content {
     border-color: #222222;
     background: #2a2a2a;
@@ -3186,14 +3180,6 @@ body.dark-mode .guide-document .conum[data-value] {
 body.dark-mode .guide-document pre b.conum {
     background: rgba(255, 255, 255, 0.12);
     color: #dddddd !important;
-}
-
-body.dark-mode .guide-document .docs-snippet-card-footer {
-    background: var(--snippet-card-footer-bg);
-}
-
-body.dark-mode .guide-document .docs-snippet-card-footer p {
-    color: var(--snippet-card-footer-text);
 }
 
 body.dark-mode .guide-document .docs-snippet-card-footer .conum[data-value] {
@@ -3239,16 +3225,6 @@ body.dark-mode .page-index-top:focus-visible,
 body.dark-mode .page-index-link:hover,
 body.dark-mode .page-index-link:focus-visible {
     background: rgba(255, 255, 255, 0.06);
-}
-
-body.dark-mode .guide-document .docs-snippet-card,
-body.dark-mode .guide-document .docs-code-block {
-    background: var(--code-frame-bg);
-    box-shadow: none;
-}
-
-body.dark-mode .guide-document .docs-code-toolbar {
-    background: var(--code-frame-bg);
 }
 
 body.dark-mode .guide-document .docs-code-title {
@@ -3307,10 +3283,6 @@ body.dark-mode .guide-document .docs-code-tabs .docs-code-language.selected .doc
     opacity: 0.92;
 }
 
-body.dark-mode .guide-document .docs-code-content {
-    background: var(--code-frame-bg);
-}
-
 body.dark-mode .guide-document pre,
 body.dark-mode .guide-document pre > code,
 body.dark-mode .guide-document .docs-code-content code {
@@ -3319,13 +3291,8 @@ body.dark-mode .guide-document .docs-code-content code {
 
 body.dark-mode .guide-document .docs-code-copy:hover,
 body.dark-mode .guide-document .docs-code-copy.copied {
-    background: var(--code-frame-copy-hover-bg);
+    background: var(--snippet-card-action-hover-bg);
     color: #ffffff;
-}
-
-body.dark-mode .guide-document .docs-code-block > .docs-code-copy {
-    background: var(--code-frame-copy-bg);
-    box-shadow: none;
 }
 
 body.dark-mode .project-card,

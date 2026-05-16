@@ -36,7 +36,7 @@ gradle/
     Version catalog, platform docs metadata properties, and vendored build-only jars.
 
 gradle/build-plugin/
-    Contains the Micronaut build plugin jar used by `buildSrc` for the docs engine and guide assets.
+    Contains the Micronaut docs build plugin jar used by `buildSrc` for the docs engine and renderer API.
     It is referenced directly with `files(...)`; do not reintroduce `mavenLocal()` or a repo-local Maven layout.
 
 repos/
@@ -55,13 +55,13 @@ build/site/
 - `gradle/platform-doc-icons.properties`: curated icon mapping for sidebar and overview cards.
 - `gradle/platform-doc-categories.properties`: curated category/grouping metadata. The first matching category wins; keep `Most Popular` first.
 - `gradle/platform-doc-shards.properties`: preferred GitHub Actions guide-build shard plan.
-- `gradle/build-plugin/micronaut-gradle-plugins-*.jar`: vendored Micronaut build plugin jar used directly by `buildSrc`; this keeps CI independent of a local publish from another checkout.
+- `gradle/build-plugin/micronaut-docs-build-plugins-*.jar`: vendored Micronaut docs build plugin jar used directly by `buildSrc`; this keeps CI independent of a local publish from another checkout.
+- `gradle/build-plugin/micronaut-gradle-plugins-*.jar`: retained legacy build plugin jar. It is not used by `buildSrc`; keep it only while the repository still needs that fallback artifact.
 - `build/site/index.html`: generated single-page UI.
 - `build/site/platform-assets/documents/*.html`: lazy-loaded project guide fragments.
 - `build/site/platform-assets/documents/*.js`: script fallback for `file://` loading and HTTP fetch failures.
 - `build/site/platform-assets/sidebar-menu.html`: generated lazy sidebar menu markup.
 - `build/site/platform-assets/search-index.json`: generated static search index.
-- `build/site/guide-assets/`: shared Micronaut guide theme assets copied from the docs plugin classpath.
 
 ## Main Gradle Tasks
 
@@ -72,10 +72,10 @@ build/site/
 - `syncPlatformGuideShardSubmodules`: initializes and aligns only the projects selected by `platformDocs.guideShardIndex` / `platformDocs.guideShardCount`.
 - `alignPlatformVersions`: checks out every selected docs submodule at the platform-managed tag.
 - `verifyPlatformAlignment`: verifies selected submodule HEADs match expected platform tags.
-- `buildPlatformGuideDocs`: runs each selected submodule's `./gradlew -q -Dorg.gradle.vfs.watch=false docs`.
-- `stagePlatformGuideDocsArtifact`: stages selected shard docs under `build/guide-docs-artifact`.
-- `renderPlatformDocs`: renders the single-page site from existing built docs and source guides. It does not build submodule docs.
-- `generatePlatformDocs`: builds selected guide docs and renders the site.
+- `buildPlatformGuideDocs`: optional slow task that runs each selected submodule's `./gradlew -q -Dorg.gradle.vfs.watch=false docs` only when API or configuration reference output under `build/docs` must be refreshed.
+- `stagePlatformGuideDocsArtifact`: renders selected guide sources with the platform renderer and stages the fragments plus any available reference output under `build/guide-docs-artifact`.
+- `renderPlatformDocs`: renders the single-page site from source guides or staged guide fragments. It does not run submodule docs tasks.
+- `generatePlatformDocs`: verifies alignment and renders the site from source guides or staged guide fragments. It does not run submodule docs tasks.
 - `verifyPlatformDocs`: generates docs and verifies the generated site.
 - `verifyRenderedPlatformDocs`: renders from existing/prebuilt docs and verifies the generated site.
 - `check`: depends on alignment verification and generated docs verification.
@@ -184,10 +184,12 @@ Important classes:
 - `SyncPlatformGuideShardSubmodulesTask`: adds and aligns shard-selected docs submodules for CI.
 - `AlignPlatformVersionsTask`: checks out submodules at expected version tags.
 - `VerifyPlatformAlignmentTask`: validates selected submodule versions.
-- `BuildGuideDocsTask`: invokes submodule docs builds with Java 25.
-- `StageGuideDocsArtifactTask`: stages generated docs output and pre-rendered platform guide fragments for shard artifact upload.
-- `GeneratePlatformDocsTask`: renders the site, copies guide assets, builds sidebar/menu/search/reference assets, and writes lazy document fragments.
+- `BuildGuideDocsTask`: optional Java 25 task for refreshing generated API/configuration reference output. It is not part of the normal guide rendering path.
+- `StageGuideDocsArtifactTask`: stages pre-rendered platform guide fragments and any available generated reference output for shard artifact upload.
+- `GeneratePlatformDocsTask`: renders the site, copies local platform assets, builds sidebar/menu/search/reference assets, and writes lazy document fragments.
+- `GuideToc`: parses `toc.yml` once into a platform-owned source/index model used by rendering, sidebar, page index, search entries, and verification.
 - `ModernGuideRenderer`: renders guide HTML directly from `src/main/docs/guide/toc.yml` and `.adoc` sources with the Micronaut docs engine.
+- `PlatformGuideHtmlRenderer`: implements the docs plugin `Renderer` API and emits platform-owned snippets, dependencies, configuration samples, admonitions, and callout marker markup directly.
 - `VerifyPlatformDocsTask`: checks generated site integrity.
 - `PlatformDocsSearchTest`: browser-backed tests for search, lazy loading, file URL fallback, sidebar behavior, and code highlighting.
 
@@ -196,14 +198,19 @@ Important classes:
 The renderer should use project sources, not downloaded docs:
 
 - Each project guide source is `repos/<project>/src/main/docs/guide/toc.yml`.
-- `ModernGuideRenderer` walks the YAML TOC and renders each referenced `.adoc` source through the Micronaut docs engine.
+- `GuideToc` reads the YAML TOC into a stable numbered model. `ModernGuideRenderer`, sidebar generation, page-index generation, search indexing, and verification must use that model instead of reparsing TOC structure in separate places or depending on Micronaut build's internal `UserGuideNode` classes.
+- `GuideToc` is the local public-boundary substitute until Micronaut build exposes a stable TOC/index API. Adopt an upstream API only if it can still provide one model for rendering, sidebar entries, page-index entries, search entries, and verification.
+- `ModernGuideRenderer` walks the `GuideToc` model and renders each referenced `.adoc` source through the Micronaut docs engine.
+- `PlatformGuideHtmlRenderer` is registered with the engine by `engine.setRenderer(renderer)`.
+- The upstream `LanguageSnippetMacro` resolves snippet source files, tags, and indentation into `Renderer.CodeSample` DTOs before calling `renderLanguageSnippet`.
+- `Renderer.CodeSample` carries the normalized selector language, syntax highlighter language, renderable source, and snippet CSS class. Platform renderers must consume those fields directly instead of rendering an Asciidoctor block and parsing `<pre>`/`<code>` HTML to rediscover the same metadata.
+- `PlatformGuideHtmlRenderer.renderLanguageSnippet` must render those DTO sources directly. Do not parse Asciidoc include directives or post-process already-rendered HTML inside this project.
 - The renderer sets Asciidoctor attributes from the submodule `gradle.properties` and platform version data.
 - The renderer temporarily sets `user.dir` to the submodule directory because legacy snippet macros depend on it.
 - Includes use the submodule root as the Asciidoctor base directory.
-- The generated `build/docs` output is still required because API docs and configuration reference pages are copied from submodule builds.
+- Generated `build/docs` output is optional at render time. When it exists, API docs and configuration reference pages are copied from submodule builds.
 - GitHub Actions shard jobs render each guide fragment from source while the selected submodules are initialized, then stage it as `repos/<project>/build/platform-docs/guide.html`.
 - The final render job reads staged `build/platform-docs/guide.html` fragments when present, so it does not need to initialize all guide source submodules after downloading shard artifacts.
-- Shared guide assets are copied from `grails-doc-files.jar` on the classpath, not from a downloaded documentation site.
 - Local UI assets are copied from `buildSrc/src/main/resources/io/micronaut/docs/assets`.
 
 The platform site is static:
@@ -221,11 +228,11 @@ The focused design cookbook lives in `DESIGN_COOKBOOK.md`. Any change that affec
 
 The platform docs page has two different sources of markup and one owner for visible styling:
 
-- Guide body markup comes from the Micronaut docs engine. `ModernGuideRenderer` reads each project's `src/main/docs/guide/toc.yml`, renders the referenced `.adoc` files, and keeps the semantic HTML that the docs engine emits: headings, paragraphs, lists, tables, admonitions, source blocks, callouts, and multi-language selectors.
+- Guide body markup comes from the Micronaut docs engine plus the platform renderer. `ModernGuideRenderer` reads each project's `src/main/docs/guide/toc.yml`, renders the referenced `.adoc` files, and `PlatformGuideHtmlRenderer` emits platform-owned macro HTML for snippets, dependencies, configuration samples, admonitions, and callouts.
 - The application shell markup comes from Handlebars templates in `buildSrc/src/main/resources/io/micronaut/docs/templates`. This includes the sidebar, top bar, overview cards, document metadata buttons, search UI, reference sheet, lazy document hosts, and project/category grouping.
 - The platform page must style both sources with `buildSrc/src/main/resources/io/micronaut/docs/assets/site.css`. Generated `index.html` should import only `platform-assets/site.css` as a stylesheet.
-- Do not import CSS from `guide-assets/css/*`, `guide-assets/style/*`, generated Javadocs, generated configuration reference pages, or the old Micronaut docs template into the main platform page. Those files can be copied as assets for iframes or compatibility scripts, but the platform shell must not depend on their styles.
-- `VerifyPlatformDocsTask` enforces this by checking that generated `index.html` references `platform-assets/site.css` and does not contain `href="guide-assets/css/` or `href="guide-assets/style/`.
+- Do not import CSS from `guide-assets/css/*`, `guide-assets/style/*`, generated Javadocs, generated configuration reference pages, or the old Micronaut docs template into the main platform page.
+- `VerifyPlatformDocsTask` enforces this by checking that generated `index.html` references `platform-assets/site.css` and does not contain `guide-assets/` or `multi-language-sample.js`.
 
 Style ownership:
 
@@ -238,7 +245,8 @@ Style ownership:
 
 Code sample styling:
 
-- `ModernGuideRenderer` rewrites Asciidoctor listing blocks into the platform structure: optional `.docs-code-title`, `.docs-code-block`, `.docs-code-copy`, `.docs-code-content`, and the original `<pre><code>`.
+- `PlatformGuideHtmlRenderer` emits modern macro snippets directly into the platform structure: optional `.docs-code-title`, `.docs-code-block`, `.docs-code-copy`, `.docs-code-content`, and `<pre><code>`.
+- `ModernGuideRenderer` may normalize source `.adoc` before rendering for known source-level issues, but it must not modernize generated HTML with regex passes such as `modernizeListingBlocks`.
 - Static syntax coloring is applied after rendering by the Gradle Node plugin task. `PlatformDocsPlugin` stages `buildSrc/src/main/resources/io/micronaut/docs/shiki`, runs `npm ci`, and executes `highlight.mjs` over `build/site/platform-assets/documents`.
 - Shiki emits static token spans and inline CSS custom properties such as `--shiki-light` and `--shiki-dark`. Browser runtime syntax highlighting is intentionally not used.
 - `site.css` applies those Shiki colors with `.guide-document .shiki` and `body.dark-mode .guide-document .shiki`; the theme switch changes which CSS variable is visible.
@@ -246,7 +254,7 @@ Code sample styling:
 - Language-tab icons are generated into `platform-assets/site.js` from vendored SVG resources. Prefer official or widely recognized open-source brand SVGs from `buildSrc/src/main/resources/io/micronaut/docs/assets/icons/brands` for Java/OpenJDK, Kotlin, Groovy, Gradle, Maven, YAML, JSON, TOML, GraphQL, Python, JavaScript, TypeScript, HTML, and shell. Use small project-owned stroke icons only for unbranded formats such as `properties`, `HOCON`, `SQL`, `XML`, `protobuf`, and plaintext.
 - Single-language code samples must not show language hint badges or bottom-right labels. The only persistent action inside a standalone block is the copy button.
 - Multi-language samples may show language tabs. The tab label/icon is UI for switching variants, not a hint badge on a single sample.
-- The multi-language behavior still comes from the copied `guide-assets/js/multi-language-sample.js` compatibility script plus platform hydration in `site.js`; only the script is imported, not its old CSS.
+- Multi-language behavior is owned by platform `site.js`; do not reintroduce the old `guide-assets/js/multi-language-sample.js` compatibility script.
 
 ## Practical UI Design Guide
 
@@ -289,7 +297,7 @@ Dependency snippet tabs:
 - Dependency examples are usually multi-language samples for Gradle and Maven. Preserve tab behavior through `.multi-language-selector`, `.multi-language-sample`, `.docs-code-toolbar`, `.docs-code-tabs`, and `.docs-code-language`.
 - Tabs are controls for switching equivalent dependency declarations, not badges. Use concise labels such as `Gradle`, `Gradle (Groovy)`, `Gradle (Kotlin)`, and `Maven`, with icons only where the platform tab renderer already supports them.
 - Keep tab groups horizontally scrollable on small screens and avoid layouts where the copy button forces tab text to wrap awkwardly.
-- The copied classpath script `guide-assets/js/multi-language-sample.js` may provide compatibility behavior, but visible styling belongs to `platform-assets/site.css` and hydration belongs to platform `site.js`.
+- Visible styling belongs to `platform-assets/site.css` and multi-language hydration belongs to platform `site.js`.
 
 Configuration and property snippets:
 
@@ -472,7 +480,7 @@ If Playwright cannot launch in the local macOS sandbox, tests may abort with a c
 - Missing `gradle/platform-doc-projects.properties`: run `./gradlew -q scanPlatformProjects`.
 - Missing submodule: run `./gradlew -q syncPlatformProjectSubmodules`, or for CI shard work use `syncPlatformGuideShardSubmodules`.
 - Alignment failure: inspect the submodule for local changes, then run `./gradlew -q alignPlatformVersions`.
-- Missing generated guide HTML: run `./gradlew -q -PplatformDocs.projectSlugs=<slug> buildPlatformGuideDocs`.
+- Missing staged guide HTML in CI final render: confirm that `stagePlatformGuideDocsArtifact` produced `repos/<project>/build/platform-docs/guide.html`.
 - CI final render fails while rendering Core/source guides: ensure `stagePlatformGuideDocsArtifact` produced `repos/<project>/build/platform-docs/guide.html` in each shard artifact. The final render job should read those fragments instead of rendering from uninitialized submodule sources.
 - `Documentation could not be loaded`: check both `platform-assets/documents/<slug>.html` and `<slug>.js`; the JavaScript fallback should cover `file://` and HTTP fetch failures.
 - No search index available under `file://`: ensure `platform-assets/search-index.js` exists; browsers block JSON fetches from `file://`.

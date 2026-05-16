@@ -35,10 +35,6 @@ record GuideProject(
         return URI.create(publishedGuideUrl);
     }
 
-    String guideIndexPath() {
-        return submodulePath + "/build/docs/guide/index.html";
-    }
-
     String tocPath() {
         return submodulePath + "/src/main/docs/guide/toc.yml";
     }

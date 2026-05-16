@@ -1,14 +1,6 @@
 package io.micronaut.docs;
 
 import io.micronaut.docs.asciidoc.AsciiDocEngine;
-import io.micronaut.docs.internal.FileResourceChecker;
-import io.micronaut.docs.internal.UserGuideNode;
-import io.micronaut.docs.internal.YamlTocStrategy;
-import org.asciidoctor.Attributes;
-import org.asciidoctor.AttributesBuilder;
-import org.asciidoctor.Options;
-import org.asciidoctor.OptionsBuilder;
-import org.asciidoctor.SafeMode;
 import org.radeox.engine.context.BaseInitialRenderContext;
 
 import java.io.File;
@@ -16,30 +8,20 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class ModernGuideRenderer {
-    private static final Pattern LISTING_BLOCK = Pattern.compile(
-        "<div class=\"listingblock([^\"]*)\">\\s*(?:<div class=\"title\">(.*?)</div>\\s*)?<div class=\"content\">\\s*(<pre[^>]*>\\s*<code([^>]*)>.*?</code>\\s*</pre>)\\s*</div>\\s*</div>",
-        Pattern.CASE_INSENSITIVE | Pattern.DOTALL
-    );
-    private static final Pattern LITERAL_INLINE_CODE_BLOCK = Pattern.compile(
-        "<div class=\"literalblock\">\\s*<div class=\"content\">\\s*<pre>\\s*`([^`\\r\\n]+)`\\s*</pre>\\s*</div>\\s*</div>",
-        Pattern.CASE_INSENSITIVE | Pattern.DOTALL
+    private static final Pattern INDENTED_INLINE_CODE_BLOCK = Pattern.compile("(?m)^\\s{4,}`([^`\\r\\n]+)`\\s*$");
+    private static final Pattern SNIPPET_INDENT_TITLE_SEPARATOR = Pattern.compile(
+        "(snippet::[^\\[]+\\[[^\\]]*?\\bindent\\s*=\\s*-?\\d+)\\s+(title\\s*=)",
+        Pattern.CASE_INSENSITIVE
     );
     private static final Pattern PARAGRAPH_START = Pattern.compile("<div class=\"paragraph\">\\s*<p>", Pattern.CASE_INSENSITIVE);
     private static final Pattern PARAGRAPH_END = Pattern.compile("\\s*</div>", Pattern.CASE_INSENSITIVE);
-    private static final Pattern CODE_DATA_LANGUAGE = Pattern.compile("\\bdata-lang=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
-    private static final Pattern CODE_LANGUAGE_CLASS = Pattern.compile("\\blanguage-([a-z0-9_-]+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern DEPENDENCY_XML = Pattern.compile("&lt;/?(?:dependency|dependencyManagement|annotationProcessorPaths|groupId|artifactId)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern DEPENDENCY_GRADLE = Pattern.compile("\\b(?:api|implementation|compileOnly|runtimeOnly|annotationProcessor|testImplementation|ksp|kapt)\\s*\\(", Pattern.CASE_INSENSITIVE);
 
     private final Path projectDirectory;
     private final GuideProject project;
@@ -67,13 +49,15 @@ final class ModernGuideRenderer {
         System.setProperty("user.dir", submoduleDirectory.toString());
         try {
             Map<String, Object> attributes = renderAttributes(submoduleDirectory, sourceDocs);
-            BaseInitialRenderContext context = renderContext(sourceDocs);
+            BaseInitialRenderContext context = renderContext(submoduleDirectory);
             AsciiDocEngine engine = new AsciiDocEngine(context);
+            PlatformGuideHtmlRenderer renderer = new PlatformGuideHtmlRenderer();
+            engine.setRenderer(renderer);
             engine.setEngineProperties(engineProperties(attributes));
             putEngineAttributes(engine, attributes);
             context.setRenderEngine(engine);
 
-            UserGuideNode guide = new YamlTocStrategy(new FileResourceChecker(guideSource.toFile()), ".adoc").generateToc(tocFile.toFile());
+            GuideToc guide = GuideToc.readSource(guideSource);
             StringBuilder content = new StringBuilder(1024 * 64);
             content.append("""
                 <!doctype html>
@@ -90,9 +74,8 @@ final class ModernGuideRenderer {
                 html(project.displayName())
             ));
             try {
-                List<UserGuideNode> chapters = children(guide);
-                for (int i = 0; i < chapters.size(); i++) {
-                    appendGuideNode(content, engine, context, attributes, submoduleDirectory, guideSource, chapters.get(i), 0, Integer.toString(i + 1));
+                for (GuideToc.Node chapter : guide.children()) {
+                    appendGuideNode(content, engine, context, guideSource, chapter);
                 }
             } catch (RuntimeException e) {
                 throw new IOException("Failed to render " + project.displayName() + " guide with the Micronaut docs engine.", e);
@@ -128,7 +111,7 @@ final class ModernGuideRenderer {
         attributes.put("testsuitegroovy", submoduleDirectory.resolve("test-suite-groovy/src/test/groovy/io/micronaut/docs").toString());
         attributes.put("testsuitekotlin", submoduleDirectory.resolve("test-suite-kotlin/src/test/kotlin/io/micronaut/docs").toString());
         attributes.put("sourceRepo", sourceDocsEditUrl());
-        attributes.put("docdir", sourceDocs.toString());
+        attributes.put("docdir", submoduleDirectory.toString());
         return attributes;
     }
 
@@ -147,10 +130,10 @@ final class ModernGuideRenderer {
         return attributes;
     }
 
-    private BaseInitialRenderContext renderContext(Path sourceDocs) {
+    private BaseInitialRenderContext renderContext(Path submoduleDirectory) {
         BaseInitialRenderContext context = new BaseInitialRenderContext();
         context.set("contextPath", "..");
-        context.set("base.dir", sourceDocs.toString());
+        context.set("base.dir", submoduleDirectory.toString());
         context.set("apiBasePath", projectDirectory.resolve(project.generatedDocsPath()).toAbsolutePath().normalize().toString());
         context.set("apiContextPath", "..");
         context.set("resourcesContextPath", "..");
@@ -172,78 +155,58 @@ final class ModernGuideRenderer {
         StringBuilder content,
         AsciiDocEngine engine,
         BaseInitialRenderContext context,
-        Map<String, Object> attributes,
-        Path baseDir,
         Path guideSource,
-        UserGuideNode node,
-        int level,
-        String sectionNumber
+        GuideToc.Node node
     ) throws IOException {
-        Path sourceFile = guideSource.resolve(node.getFile()).normalize();
+        if (node.file() == null || node.file().isBlank()) {
+            throw new IOException("Missing guide source file for " + project.displayName() + " TOC section: " + node.id());
+        }
+        Path sourceFile = guideSource.resolve(node.file()).normalize();
         if (!sourceFile.startsWith(guideSource) || !Files.isRegularFile(sourceFile)) {
             throw new IOException("Missing guide source file for " + project.displayName() + ": " + sourceFile);
         }
-        content.append(sectionHeading(node, level, sectionNumber, node.getFile()));
+        content.append(sectionHeading(node));
 
         context.set("sourceFile", sourceFile.toFile());
-        content.append(renderAsciiDoc(engine, Files.readString(sourceFile, StandardCharsets.UTF_8), attributes, baseDir)).append('\n');
+        try {
+            content.append(renderAsciiDoc(engine, context, Files.readString(sourceFile, StandardCharsets.UTF_8))).append('\n');
+        } catch (RuntimeException e) {
+            throw new IOException("Failed to render " + project.displayName() + " guide source: " + sourceFile
+                + " (" + e.getClass().getSimpleName() + ": " + e.getMessage() + ")", e);
+        }
 
-        List<UserGuideNode> childNodes = children(node);
-        for (int i = 0; i < childNodes.size(); i++) {
-            appendGuideNode(content, engine, context, attributes, baseDir, guideSource, childNodes.get(i), level + 1, sectionNumber + "." + (i + 1));
+        for (GuideToc.Node childNode : node.children()) {
+            appendGuideNode(content, engine, context, guideSource, childNode);
         }
     }
 
-    private static String renderAsciiDoc(AsciiDocEngine engine, String source, Map<String, Object> attributes, Path baseDir) {
-        AttributesBuilder attributesBuilder = Attributes.builder();
-        attributes.forEach(attributesBuilder::attribute);
-        OptionsBuilder optionsBuilder = Options.builder()
-            .standalone(false)
-            .baseDir(baseDir.toFile())
-            .attributes(attributesBuilder.build());
-        Object safe = attributes.get("safe");
-        if (safe != null) {
-            optionsBuilder.safe(SafeMode.valueOf(String.valueOf(safe)));
-        }
-        String html = engine.getAsciidoctor().convert(source, optionsBuilder.build());
-        return unwrapCodeBlockParagraphs(modernizeLiteralInlineCodeBlocks(modernizeCodeBlocks(html)));
+    private static String renderAsciiDoc(
+        AsciiDocEngine engine,
+        BaseInitialRenderContext context,
+        String source
+    ) {
+        String html = engine.render(normalizeAsciiDocSource(source), context);
+        return unwrapCodeBlockParagraphs(html);
     }
 
-    private static String modernizeCodeBlocks(String html) {
-        Matcher matcher = LISTING_BLOCK.matcher(html);
-        StringBuilder result = new StringBuilder(html.length() + 256);
-        String previousMultiLanguageTitle = null;
+    private static String normalizeAsciiDocSource(String source) {
+        String normalized = SNIPPET_INDENT_TITLE_SEPARATOR.matcher(source).replaceAll("$1, $2");
+        Matcher matcher = INDENTED_INLINE_CODE_BLOCK.matcher(normalized);
+        StringBuilder result = new StringBuilder(normalized.length());
         while (matcher.find()) {
-            String classes = matcher.group(1) == null ? "" : matcher.group(1).trim();
-            if (classes.contains("docs-code-block")) {
+            String code = matcher.group(1).trim();
+            if (!looksLikeJava(code)) {
                 matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group()));
                 continue;
             }
-            String title = matcher.group(2);
-            String pre = matcher.group(3);
-            boolean multiLanguageSample = hasClass(classes, "multi-language-sample");
-            boolean includeTitle = title != null && !title.isBlank();
-            if (multiLanguageSample) {
-                includeTitle = includeTitle && !title.equals(previousMultiLanguageTitle);
-                previousMultiLanguageTitle = title;
-            } else {
-                previousMultiLanguageTitle = null;
-            }
-            String replacement = codeBlock(classes, title, includeTitle, pre);
-            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
-        }
-        matcher.appendTail(result);
-        return result.toString();
-    }
+            matcher.appendReplacement(result, Matcher.quoteReplacement("""
 
-    private static String modernizeLiteralInlineCodeBlocks(String html) {
-        Matcher matcher = LITERAL_INLINE_CODE_BLOCK.matcher(html);
-        StringBuilder result = new StringBuilder(html.length() + 256);
-        while (matcher.find()) {
-            String code = matcher.group(1).trim();
-            String languageAttributes = looksLikeJava(code) ? " class=\"language-java\" data-lang=\"java\"" : "";
-            String replacement = codeBlock("", null, false, "<pre><code" + languageAttributes + ">" + code + "</code></pre>");
-            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+                [source,java]
+                ----
+                %s
+                ----
+
+                """.formatted(code)));
         }
         matcher.appendTail(result);
         return result.toString();
@@ -304,82 +267,9 @@ final class ModernGuideRenderer {
         return matcher.end();
     }
 
-    private static String codeBlock(String classes, String title, boolean includeTitle, String pre) {
-        String language = codeLanguage(pre);
-        String blockClasses = classes == null || classes.isBlank()
-            ? "listingblock docs-code-block docs-snippet-card"
-            : "listingblock " + classes + " docs-code-block docs-snippet-card";
-        if (language.equals("properties")) {
-            blockClasses += " docs-code-properties-snippet docs-snippet-card-properties";
-        }
-        if (isDependencySnippet(pre)) {
-            blockClasses += " docs-code-dependency-snippet docs-snippet-card-dependency";
-        }
-        String outsideTitleHtml = title == null || title.isBlank() || !includeTitle
-            ? ""
-            : "<div class=\"docs-code-title docs-snippet-card-title\">" + title + "</div>";
-        String copyButton = "<button class=\"docs-code-copy docs-snippet-card-action\" type=\"button\" aria-label=\"Copy code\" title=\"Copy code\" data-copy-code>" + copyIcon() + "</button>";
-        return """
-            %s
-            <div class="%s" data-code-block>
-            %s
-            <div class="content docs-code-content docs-snippet-card-content">
-            %s
-            </div>
-            </div>
-            """.formatted(outsideTitleHtml, blockClasses, copyButton, pre);
-    }
-
-    private static boolean isDependencySnippet(String pre) {
-        String language = codeLanguage(pre);
-        if (language.equals("gradle") || language.equals("maven")) {
-            return true;
-        }
-        return switch (language) {
-            case "xml", "text", "plaintext" -> DEPENDENCY_XML.matcher(pre).find();
-            case "groovy", "kotlin", "java" -> DEPENDENCY_GRADLE.matcher(pre).find();
-            default -> DEPENDENCY_XML.matcher(pre).find() || DEPENDENCY_GRADLE.matcher(pre).find();
-        };
-    }
-
-    private static String codeLanguage(String pre) {
-        Matcher dataLanguage = CODE_DATA_LANGUAGE.matcher(pre);
-        if (dataLanguage.find()) {
-            return normalizeLanguage(dataLanguage.group(1));
-        }
-        Matcher languageClass = CODE_LANGUAGE_CLASS.matcher(pre);
-        if (languageClass.find()) {
-            return normalizeLanguage(languageClass.group(1));
-        }
-        return "";
-    }
-
-    private static String normalizeLanguage(String language) {
-        String normalized = language == null ? "" : language.trim().toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "gradle-groovy", "gradle-kotlin" -> "gradle";
-            case "pom" -> "maven";
-            case "props", "property" -> "properties";
-            case "txt" -> "text";
-            default -> normalized;
-        };
-    }
-
-    private static boolean hasClass(String classes, String cssClass) {
-        if (classes == null || classes.isBlank()) {
-            return false;
-        }
-        for (String className : classes.split("\\s+")) {
-            if (className.equals(cssClass)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String sectionHeading(UserGuideNode node, int level, String sectionNumber, String sourcePath) {
-        int headingLevel = level == 0 ? 1 : 2;
-        String id = attribute(node.getName());
+    private String sectionHeading(GuideToc.Node node) {
+        int headingLevel = node.level() == 0 ? 1 : 2;
+        String id = attribute(node.id());
         return """
             <div class="guide-section-heading">
                 <h%s id="%s"><a class="anchor" href="#%s"></a>%s %s</h%s>
@@ -395,34 +285,17 @@ final class ModernGuideRenderer {
             headingLevel,
             id,
             id,
-            html(sectionNumber),
-            html(node.getTitle()),
+            html(node.number()),
+            html(node.title()),
             headingLevel,
             attribute(sourceDocsEditUrl()),
-            attribute(sourcePath)
+            attribute(node.file())
         );
     }
 
     private String sourceDocsEditUrl() {
         String branch = project.branch().isBlank() ? "HEAD" : project.branch();
         return project.repositoryUrl().replaceAll("\\.git$", "") + "/edit/" + branch + "/src/main/docs";
-    }
-
-    private static List<UserGuideNode> children(UserGuideNode node) {
-        if (node == null || node.getChildren() == null) {
-            return List.of();
-        }
-        List<UserGuideNode> result = new ArrayList<>();
-        for (Object child : node.getChildren()) {
-            result.add((UserGuideNode) child);
-        }
-        return result;
-    }
-
-    private static String copyIcon() {
-        return """
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg><span class="visually-hidden">Copy code</span>\
-            """;
     }
 
     private static String trailingSlash(Path path) {

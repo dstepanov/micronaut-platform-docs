@@ -40,8 +40,7 @@ Generated output is written under `build/site`:
 ```text
 build/site/
   index.html         Single-page platform documentation UI
-  assets/            Generated guide output copied from each submodule
-  guide-assets/      Shared Micronaut guide theme assets copied from the build plugin classpath
+  assets/            Generated API and configuration reference output copied when present
   platform-assets/   Static assets owned by this repository
 ```
 
@@ -106,22 +105,26 @@ This task checks that each submodule HEAD has the expected platform tag.
 ./gradlew -q generatePlatformDocs
 ```
 
-`generatePlatformDocs` depends on the alignment verifier and on `buildPlatformGuideDocs`. The guide build task invokes each discovered submodule's Gradle wrapper:
+`generatePlatformDocs` depends on the alignment verifier. It renders each selected guide from the submodule source tree with the Micronaut docs engine and the platform renderer:
 
 ```text
-repos/<project>/gradlew -q -Dorg.gradle.vfs.watch=false docs
+repos/<project>/src/main/docs/guide/toc.yml
+repos/<project>/src/main/docs/guide/**/*.adoc
 ```
 
 The generator then:
 
-- reads each generated `build/docs/guide/index.html`
 - reads each project's `src/main/docs/guide/toc.yml`
-- renders guide body markup directly from each project's source `.adoc` files unless a staged `build/platform-docs/guide.html` fragment is available
+- parses `toc.yml` through the platform `GuideToc` model so rendering, sidebar entries, page-index data, search entries, and verification all use the same numbered source index
+- renders guide body markup directly from each project's source `.adoc` files through `ModernGuideRenderer` and `PlatformGuideHtmlRenderer`, unless a staged `build/platform-docs/guide.html` fragment is available
 - prefixes anchors so all guides can coexist in one page
-- copies generated guide content to `build/site/assets/<project>/docs`
-- copies shared Micronaut guide assets from `grails-doc-files.jar` to `build/site/guide-assets`
+- copies generated API and configuration reference output from `build/docs` to `build/site/assets/<project>/docs` when that output exists
 - copies local UI assets to `build/site/platform-assets`
 - renders the shell, sidebar, and overview categories with Handlebars templates
+
+The platform renderer uses the `io.micronaut.docs.Renderer` API from the vendored `micronaut-docs-build-plugins` jar. It emits platform-owned snippet, dependency, configuration, admonition, and callout markup directly. Do not modernize the already-rendered HTML with regex passes, and do not import the old generated guide template assets into the main page.
+
+`GuideToc` is the platform-owned source index for now. If Micronaut build later exposes a public TOC/index API, this project should switch to that API only when it can still drive rendering, sidebar entries, page-index entries, search entries, and verification from one stable model.
 
 The overview and sidebar grouping is curated in `gradle/platform-doc-categories.properties`. It is adapted from the older `micronaut-docs-index` module taxonomy while keeping the generated page local, static, and aligned to the platform manifest. The first matching category wins, so the `Most Popular` category is intentionally listed first.
 
@@ -146,8 +149,9 @@ A single shard can be built and staged locally with:
 The shard artifact is staged under `build/guide-docs-artifact` with paths that can be merged back into the repository root:
 
 ```text
-build/guide-docs-artifact/repos/<project>/build/docs
+build/guide-docs-artifact/repos/<project>/build/platform-docs/guide.html
 build/guide-docs-artifact/repos/<project>/src/main/docs/guide/toc.yml
+build/guide-docs-artifact/repos/<project>/build/docs        optional API/config reference output
 ```
 
 ## Verification
@@ -173,10 +177,10 @@ build/guide-docs-artifact/repos/<project>/src/main/docs/guide/toc.yml
 | `syncPlatformProjectSubmodules` | Adds missing Micronaut project submodules and checks out platform-managed tags. | `.gitmodules`, `repos/*` |
 | `alignPlatformVersions` | Checks out each project submodule at the platform-managed release tag. | `repos/*` git state |
 | `verifyPlatformAlignment` | Verifies submodule HEAD tags match platform-managed versions. | No |
-| `buildPlatformGuideDocs` | Runs each submodule's `docs` task with Java 25. | `repos/*/build/docs` |
-| `stagePlatformGuideDocsArtifact` | Stages generated guide docs and pre-rendered platform guide fragments for a selected shard. | `build/guide-docs-artifact` |
-| `renderPlatformDocs` | Renders the single-page site from existing generated guide docs. | `build/site` |
-| `generatePlatformDocs` | Builds guide docs and renders the single-page platform site. | `build/site` |
+| `buildPlatformGuideDocs` | Optional slow task that runs each submodule's `docs` task with Java 25 only when API/config reference output must be refreshed. | `repos/*/build/docs` |
+| `stagePlatformGuideDocsArtifact` | Stages platform-rendered guide fragments and any available reference docs for a selected shard. | `build/guide-docs-artifact` |
+| `renderPlatformDocs` | Renders the single-page site from project guide sources and any available reference docs. | `build/site` |
+| `generatePlatformDocs` | Verifies alignment and renders the single-page platform site from project sources. | `build/site` |
 | `verifyPlatformDocs` | Verifies generated HTML and required static assets. | No |
 | `verifyRenderedPlatformDocs` | Verifies a site rendered from prebuilt guide docs. | No |
 | `check` | Runs platform alignment and generated site verification. | Depends on generated docs |
@@ -190,7 +194,7 @@ The workflow uses GitHub Actions matrix parallelism rather than parallel Gradle 
 
 - `plan` checks out the root repository without recursive submodules, initializes only `repos/micronaut-platform`, scans the platform catalog, and writes the matrix from `gradle/platform-doc-shards.properties`
 - `test-build-logic` runs the fast build logic tests that do not require generated site output
-- `build-guides` runs one job per matrix shard, checks out the root repository without recursive submodules, initializes only the selected guide submodules, verifies alignment, builds docs, renders platform guide fragments, and uploads `build/guide-docs-artifact`
+- `build-guides` runs one job per matrix shard, checks out the root repository without recursive submodules, initializes only the selected guide submodules, verifies alignment, renders platform guide fragments, and uploads `build/guide-docs-artifact`
 - `render` downloads and merges all shard artifacts, initializes only `repos/micronaut-platform`, reads the staged platform guide fragments, renders `build/site`, verifies the rendered page, runs the browser-backed tests against the rendered site, and uploads the GitHub Pages artifact
 
 ```bash
@@ -240,15 +244,15 @@ The site is generated as plain static HTML, CSS, and JavaScript from Gradle. It 
 - collapsible table-of-contents sections
 - prefixed anchors so all selected guides can coexist on one page
 
-The HTML frame, sidebar project sections, TOC entries, and JavaScript data are rendered through Handlebars. The TOC model is parsed from each project's `toc.yml` using SnakeYAML and rendered with a single recursive partial; the renderer enables `Handlebars.infiniteLoops(true)` because Handlebars.java disables recursive partials by default. The root Gradle task still builds all guide content from the git submodules, copies their generated docs under `build/site/assets/<project>/docs`, and writes the platform UI assets under `build/site/platform-assets`. Shared guide CSS, JavaScript, fonts, and default images are copied from the Micronaut build plugin classpath instead of from any generated submodule docs directory.
+The HTML frame, sidebar project sections, TOC entries, and JavaScript data are rendered through Handlebars. The TOC model is parsed from each project's `toc.yml` by `GuideToc`, the platform-owned source index that feeds rendering, the sidebar, the page index, search entries, and verification. The menu is rendered with a single recursive partial; the renderer enables `Handlebars.infiniteLoops(true)` because Handlebars.java disables recursive partials by default. Guide fragments are rendered from source through the Micronaut docs engine and the platform `Renderer` implementation. Generated API and configuration reference output is copied under `build/site/assets/<project>/docs` only when it already exists, and platform UI assets are written under `build/site/platform-assets`.
 
 ## UI Palette
 
-The main page stylesheet is `buildSrc/src/main/resources/io/micronaut/docs/assets/site.css`. Generated platform pages must import `platform-assets/site.css` only; old guide styles are copied for assets and iframes, not imported into the shell.
+The main page stylesheet is `buildSrc/src/main/resources/io/micronaut/docs/assets/site.css`. Generated platform pages must import `platform-assets/site.css` only; old guide styles are not copied or imported into the shell.
 
-The palette is token-first. Light mode uses `--bg #f7f9fb`, `--surface #ffffff`, `--card-surface #ffffff`, `--text #172026`, `--muted #5d6b78`, `--line #d8e1e7`, Micronaut green `--accent #00a676`, and link blue `--link #1565c0`. Dark mode keeps the sidebar and top bar black while content surfaces use neutral grays: `--bg #333333`, `--surface #333333`, `--card-surface #262626`, `--surface-strong #222222`, `--text #dddddd`, `--muted #aaaaaa`, `--line #444444`, salmon accent `--accent #ff9686`, and link blue `--link #77aeff`.
+The palette is token-first. Light mode uses `--bg #f5f5f5`, `--surface #fcfcfc`, `--card-surface #ffffff`, `--text #172026`, `--muted #5d6b78`, `--line #e0e0e0`, Micronaut green `--accent #00a676`, and link blue `--link #1565c0`. Dark mode keeps the sidebar and top bar black while content surfaces use neutral grays: `--bg #333333`, `--surface #333333`, `--card-surface #262626`, `--surface-strong #222222`, `--text #dddddd`, `--muted #aaaaaa`, `--line #444444`, salmon accent `--accent #ff9686`, and link blue `--link #77aeff`.
 
-Code snippets have dedicated neutral tokens so they match the gray documentation surface instead of becoming blue-gray panels. Light code frames use `--code-frame-bg #f7f8fa`, `--code-frame-border #e0e3e8`, and dependency frames use `--code-dependency-bg #f6f7f8`, `--code-dependency-border #d9dee4`. Dark code frames use `--code-frame-bg #303030`, `--code-frame-border #484848`; dependency snippets use `--code-dependency-bg #343434`, `--code-dependency-border #4d4d4d`. Shiki owns token colors statically through `--shiki-light` and `--shiki-dark`; the browser does not run runtime syntax highlighting.
+Code snippets have dedicated neutral tokens so they match the gray documentation surface instead of becoming blue-gray panels. Light code frames use `--code-frame-bg #ffffff`, a soft rgba border, and shared snippet footer tokens. Dark code frames use `--code-frame-bg #202020` with a nearly invisible neutral border. Shiki owns token colors statically through `--shiki-light` and `--shiki-dark`; the browser does not run runtime syntax highlighting.
 
 ## Design Evaluation
 
@@ -258,8 +262,8 @@ The main design risks are guide headings that feel too large on desktop, sparse 
 
 ## Troubleshooting
 
-- If `buildPlatformGuideDocs` reports a missing submodule, run `./gradlew -q syncPlatformProjectSubmodules`.
+- If `buildPlatformGuideDocs` reports a missing submodule while refreshing optional API/config reference output, run `./gradlew -q syncPlatformProjectSubmodules`.
 - If alignment fails because a submodule has local changes, inspect the affected `repos/<project>` checkout before rerunning `alignPlatformVersions`.
 - If the generated repository metadata cache is missing entries, initialize the relevant submodules or set `GITHUB_TOKEN` or `GH_TOKEN` and rerun `scanPlatformProjects`.
-- If the generated site is missing a project, confirm that the project has `src/main/docs/guide/toc.yml` and that its submodule `docs` task produced `build/docs/guide/index.html`.
+- If the generated site is missing a project, confirm that the project has `src/main/docs/guide/toc.yml` and source `.adoc` files, or that CI downloaded a staged `build/platform-docs/guide.html` fragment for it.
 - If CI fails in the final render job while rendering guide sources, confirm each shard artifact contains `repos/<project>/build/platform-docs/guide.html`; the final job should not need every source submodule initialized.

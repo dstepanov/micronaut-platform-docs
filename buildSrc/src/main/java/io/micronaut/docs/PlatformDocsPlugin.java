@@ -193,7 +193,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             BuildGuideDocsTask.class,
             task -> {
                 task.setGroup("documentation");
-                task.setDescription("Builds guide docs for each Micronaut project discovered from micronaut-platform.");
+                task.setDescription("Optionally runs submodule docs tasks when API or configuration reference output must be refreshed.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getProjectManifest().convention(projectManifest);
                 task.getShardPlan().convention(shardPlan);
@@ -211,7 +211,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             StageGuideDocsArtifactTask.class,
             task -> {
                 task.setGroup("documentation");
-                task.setDescription("Stages generated guide docs for upload as a GitHub Actions shard artifact.");
+                task.setDescription("Stages platform-rendered guide fragments and any available reference docs for upload as a GitHub Actions shard artifact.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getProjectManifest().convention(projectManifest);
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
@@ -220,7 +220,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getShardIndex().convention(guideShardIndex);
                 task.getShardCount().convention(guideShardCount);
                 task.getProjectSlugs().convention(projectSlugs);
-                task.dependsOn(buildPlatformGuideDocs);
+                task.dependsOn(syncPlatformGuideShardSubmodules);
                 task.mustRunAfter(verifyPlatformAlignment);
             }
         );
@@ -230,7 +230,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             GeneratePlatformDocsTask.class,
             task -> {
                 task.setGroup("documentation");
-                task.setDescription("Generates the single-page Micronaut documentation site.");
+                task.setDescription("Verifies alignment and renders the single-page Micronaut documentation site from sources or staged guide fragments.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);
@@ -241,7 +241,6 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
                 task.getProjectSlugs().convention(projectSlugs);
                 task.dependsOn(scanPlatformProjects);
                 task.dependsOn(verifyPlatformAlignment);
-                task.dependsOn(buildPlatformGuideDocs);
                 task.getOutputs().upToDateWhen(taskProvider -> false);
             }
         );
@@ -251,7 +250,7 @@ public final class PlatformDocsPlugin implements Plugin<Project> {
             GeneratePlatformDocsTask.class,
             task -> {
                 task.setGroup("documentation");
-                task.setDescription("Renders the single-page Micronaut documentation site from existing generated guide docs.");
+                task.setDescription("Renders the single-page Micronaut documentation site from project guide sources and any existing reference docs.");
                 task.getProjectDirectory().convention(project.getLayout().getProjectDirectory());
                 task.getPlatformVersionCatalog().convention(platformVersionCatalog);
                 task.getProjectManifest().convention(projectManifest);

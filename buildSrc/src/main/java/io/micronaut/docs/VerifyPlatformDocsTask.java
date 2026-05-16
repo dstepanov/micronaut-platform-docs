@@ -128,11 +128,11 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(html.contains("src=\"platform-assets/site.js\""), "Generated page does not reference the external script.");
         require(!html.contains("href=\"guide-assets/css/"), "Generated page imports classpath Micronaut guide CSS.");
         require(!html.contains("href=\"guide-assets/style/"), "Generated page imports old Micronaut guide template CSS.");
-        require(html.contains("src=\"guide-assets/js/multi-language-sample.js\""), "Generated page does not reference the classpath Micronaut multi-language script.");
+        require(!html.contains("guide-assets/"), "Generated page still references old Micronaut guide template assets.");
+        require(!html.contains("multi-language-sample.js"), "Generated page still depends on the old Micronaut multi-language script.");
         require(!html.contains("highlight.pack.js"), "Generated page still runs Highlight.js in the browser.");
         require(!html.contains("initHighlightingOnLoad"), "Generated page still initializes runtime syntax highlighting.");
 
-        require(Files.isRegularFile(outputDirectory.resolve("guide-assets/js/multi-language-sample.js")), "Missing classpath Micronaut multi-language script asset.");
         require(Files.isRegularFile(outputDirectory.resolve("platform-assets/logos/micronaut-horizontal-black.svg")), "Missing black Micronaut logo asset.");
         require(Files.isRegularFile(outputDirectory.resolve("platform-assets/logos/micronaut-horizontal-white.svg")), "Missing white Micronaut logo asset.");
         require(Files.isRegularFile(outputDirectory.resolve("platform-assets/icons/micronaut-sally.svg")), "Missing Micronaut Sally project icon asset.");
