@@ -20,6 +20,10 @@ final class ModernGuideRenderer {
         "(snippet::[^\\[]+\\[[^\\]]*?\\bindent\\s*=\\s*-?\\d+)\\s+(title\\s*=)",
         Pattern.CASE_INSENSITIVE
     );
+    private static final Pattern FALSE_INDENT_ATTRIBUTE = Pattern.compile(
+        "(?m)^([ \\t]*(?:include|snippet)::[^\\r\\n\\[]+\\[[^\\r\\n\\]]*?\\bindent\\s*=\\s*)(?:\"false\"|'false'|false)(?=\\s*(?:,|\\]))",
+        Pattern.CASE_INSENSITIVE
+    );
     private static final Pattern PARAGRAPH_START = Pattern.compile("<div class=\"paragraph\">\\s*<p>", Pattern.CASE_INSENSITIVE);
     private static final Pattern PARAGRAPH_END = Pattern.compile("\\s*</div>", Pattern.CASE_INSENSITIVE);
 
@@ -193,8 +197,9 @@ final class ModernGuideRenderer {
         return unwrapCodeBlockParagraphs(html);
     }
 
-    private static String normalizeAsciiDocSource(String source) {
-        String normalized = SNIPPET_INDENT_TITLE_SEPARATOR.matcher(source).replaceAll("$1, $2");
+    static String normalizeAsciiDocSource(String source) {
+        String normalized = normalizeFalseIndentAttributes(source);
+        normalized = SNIPPET_INDENT_TITLE_SEPARATOR.matcher(normalized).replaceAll("$1, $2");
         Matcher matcher = INDENTED_INLINE_CODE_BLOCK.matcher(normalized);
         StringBuilder result = new StringBuilder(normalized.length());
         while (matcher.find()) {
@@ -211,6 +216,16 @@ final class ModernGuideRenderer {
                 ----
 
                 """.formatted(code)));
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    private static String normalizeFalseIndentAttributes(String source) {
+        Matcher matcher = FALSE_INDENT_ATTRIBUTE.matcher(source);
+        StringBuilder result = new StringBuilder(source.length());
+        while (matcher.find()) {
+            matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(1) + "0"));
         }
         matcher.appendTail(result);
         return result.toString();
