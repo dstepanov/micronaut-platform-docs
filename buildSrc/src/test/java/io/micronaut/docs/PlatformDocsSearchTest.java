@@ -286,6 +286,7 @@ final class PlatformDocsSearchTest {
                 assertNoVisibleDocumentationError(page, "core");
                 assertProjectHasHighlightedCode(page, "core");
                 assertProjectHighlightsCodeWithCallouts(page, "core");
+                assertProjectFormatsCodeCalloutFooter(page, "core");
                 assertProjectCodeTitlesAreOutsideFrames(page, "core");
                 assertPageIndexListsAndNavigates(page, "core", "1.1 What's New in Micronaut Framework 5.0.x", "core-whatsNew");
                 page.locator(".toc a[href='#core-quickStart']").click();
@@ -698,6 +699,35 @@ final class PlatformDocsSearchTest {
                     "code.closest('pre')?.classList.contains('shiki') && " +
                     "code.querySelector('.line span[style*=\"--shiki-light\"]') && " +
                     "code.querySelector('i.conum'));" +
+                "}",
+            project
+        );
+    }
+
+    private static void assertProjectFormatsCodeCalloutFooter(Page page, String project) {
+        page.waitForFunction(
+            "project => {" +
+                "const article = document.querySelector(`article.guide-document[data-project='${project}']`);" +
+                "const footer = Array.from(article?.querySelectorAll('.docs-snippet-card-footer') || [])" +
+                    ".find((element) => element.innerText.includes('The EmbeddedServer is configured') " +
+                    "&& element.innerText.includes('The retrieve method returns the controller response'));" +
+                "const items = Array.from(footer?.querySelectorAll('ol > li') || []);" +
+                "if (!footer || items.length < 4) {" +
+                "return false;" +
+                "}" +
+                "const footerStyle = getComputedStyle(footer);" +
+                "const listStyle = getComputedStyle(footer.querySelector('ol'));" +
+                "const firstItemStyle = getComputedStyle(items[0]);" +
+                "const firstMarkerStyle = getComputedStyle(items[0], '::before');" +
+                "const firstParagraphStyle = getComputedStyle(items[0].querySelector('p'));" +
+                "return footer.classList.contains('docs-code-callouts') " +
+                    "&& footerStyle.borderBottomLeftRadius.startsWith('12px') " +
+                    "&& footerStyle.paddingTop === footerStyle.paddingBottom " +
+                    "&& listStyle.listStyleType === 'none' " +
+                    "&& firstItemStyle.display === 'grid' " +
+                    "&& firstMarkerStyle.width === '20px' " +
+                    "&& firstParagraphStyle.marginTop === '0px' " +
+                    "&& firstParagraphStyle.marginBottom === '0px';" +
                 "}",
             project
         );

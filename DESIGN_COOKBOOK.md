@@ -117,7 +117,7 @@ The site should feel like a compact developer documentation application: dense, 
 - Filled brand glyphs such as Kotlin can be optically smaller than line icons so their visual weight matches Java and Properties in the tab row.
 - The Properties language tab uses a small sliders-style line icon. It should suggest key/value configuration without looking like a document badge or a separate status color.
 - Code titles stay outside the frame and share the same compact caption treatment as table captions, configuration-property table titles, and image titles: sans-serif, muted but readable, no border, no filled title bar. Keep the title close to the code frame it names, including multi-language samples where hidden selector markup may sit between the title and block.
-- Code callout lists after snippets are snippet footers. They use `.docs-snippet-card-footer`, sit on a lighter quiet footer surface than the code body, keep equal vertical padding in both themes, center each marker/text row, and use subdued numbered markers rather than a separate alert or table treatment.
+- Code callout lists after snippets are snippet footers. They use `.docs-snippet-card-footer`, sit on a lighter quiet footer surface than the code body, keep equal vertical padding in both themes, and support both old table-shaped and current ordered-list callout markup. Each callout row uses a compact marker column plus left-aligned text; links and inline code stay subdued so the footer reads as one quiet explanatory component rather than a separate alert or prose list.
 
 ## Admonitions
 

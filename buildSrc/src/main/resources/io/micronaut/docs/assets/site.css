@@ -2481,6 +2481,45 @@ body.dark-mode .theme-icon-sun {
     background: transparent;
 }
 
+.guide-document .docs-snippet-card-footer > ol {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    counter-reset: docs-callout;
+    gap: 6px;
+    list-style: none;
+}
+
+.guide-document .docs-snippet-card-footer > ol > li {
+    display: grid;
+    min-height: 22px;
+    margin: 0;
+    padding: 0;
+    counter-increment: docs-callout;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 9px;
+    align-items: start;
+    background: transparent;
+    color: var(--snippet-card-footer-text);
+}
+
+.guide-document .docs-snippet-card-footer > ol > li::before {
+    display: inline-grid;
+    width: 20px;
+    height: 20px;
+    margin-top: 1px;
+    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border-radius: 999px;
+    background: var(--snippet-card-footer-marker-bg);
+    color: var(--snippet-card-footer-text);
+    content: counter(docs-callout);
+    font-family: var(--guide-heading-font);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    place-items: center;
+}
+
 .guide-document .colist > table tr > td:first-of-type {
     padding: 0 0.75em;
     line-height: 1;
@@ -2513,6 +2552,18 @@ body.dark-mode .theme-icon-sun {
     color: var(--snippet-card-footer-text);
     font-size: 0.84rem;
     line-height: 1.5;
+}
+
+.guide-document .docs-snippet-card-footer a {
+    color: inherit;
+    text-decoration-color: color-mix(in srgb, var(--snippet-card-footer-text) 38%, transparent);
+    text-underline-offset: 0.16em;
+}
+
+.guide-document .docs-snippet-card-footer code {
+    background: color-mix(in srgb, var(--snippet-card-footer-text) 9%, transparent);
+    color: color-mix(in srgb, var(--snippet-card-footer-text) 86%, var(--text));
+    font-size: 0.78rem;
 }
 
 .guide-document .guide-section-heading {
