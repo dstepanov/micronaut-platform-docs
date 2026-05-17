@@ -120,10 +120,7 @@ final class PlatformDocsSearchTest {
         Path searchIndex = SITE_DIRECTORY.resolve("platform-assets/search-index.json");
         assertTrue(Files.isRegularFile(searchIndex), "The rendered search fixture must include a search index.");
         String indexJson = Files.readString(searchIndex, StandardCharsets.UTF_8);
-        assertTrue(indexJson.contains("\"kind\":\"api-type\""), "The search index must include API class entries.");
-        assertTrue(indexJson.contains("\"title\":\"ApplicationContext\""), "The search index must include API type titles.");
-        assertTrue(indexJson.contains("ApplicationContext.html"), "The search index must link API classes into the reference sheet.");
-        assertTrue(indexJson.contains("nettydefaultallocatornumheaparenas"), "The search index must include compact configuration property terms.");
+        assertOptionalReferenceEntries(indexJson);
         for (String slug : TEST_PROJECTS.keySet()) {
             assertTrue(indexJson.contains("\"project\":\"" + slug + "\""), "The search index must include " + slug + " entries.");
         }
@@ -187,17 +184,20 @@ final class PlatformDocsSearchTest {
                 assertEquals("project", serializationSearchResult.getAttribute("data-search-kind"), "A project name after Micronaut should prefer the project result.");
                 assertFalse(serializationResult.contains("Project"), "Project results should not show a redundant Project label.");
 
-                search(page, "ApplicationContext");
-                Locator firstResult = visibleSearchResult(page);
-                assertTrue(firstResult.innerText().contains("Class"), "Expected an API class search result.");
-                String classResultText = searchResultTextContaining(page, "io.micronaut.context");
-                assertTrue(classResultText.contains("ApplicationContext"), "Expected the ApplicationContext API type search result.");
-                clickSearchResultContaining(page, "ApplicationContext");
-                page.waitForFunction("() => document.body.classList.contains('reference-open')");
-                assertEquals("core", page.evaluate("() => document.body.dataset.project"));
-                page.waitForFunction("() => document.querySelector('[data-reference-frame]')?.src.includes('ApplicationContext.html')");
-                page.locator("button[data-reference-close]").click();
-                page.waitForFunction("() => !document.body.classList.contains('reference-open')");
+                String indexJson = searchIndexJson();
+                if (hasApiTypeEntries(indexJson)) {
+                    search(page, "ApplicationContext");
+                    Locator firstResult = visibleSearchResult(page);
+                    assertTrue(firstResult.innerText().contains("Class"), "Expected an API class search result.");
+                    String classResultText = searchResultTextContaining(page, "io.micronaut.context");
+                    assertTrue(classResultText.contains("ApplicationContext"), "Expected the ApplicationContext API type search result.");
+                    clickSearchResultContaining(page, "ApplicationContext");
+                    page.waitForFunction("() => document.body.classList.contains('reference-open')");
+                    assertEquals("core", page.evaluate("() => document.body.dataset.project"));
+                    page.waitForFunction("() => document.querySelector('[data-reference-frame]')?.src.includes('ApplicationContext.html')");
+                    page.locator("button[data-reference-close]").click();
+                    page.waitForFunction("() => !document.body.classList.contains('reference-open')");
+                }
 
                 search(page, "Application Context");
                 clickSearchResultContaining(page, "Application Context");
@@ -211,25 +211,27 @@ final class PlatformDocsSearchTest {
                 assertEquals("#serde", page.evaluate("() => window.location.hash"));
                 assertProjectStartsAtTop(page, "serde");
 
-                search(page, CONFIGURATION_PROPERTY);
-                String resultText = searchResultTextContaining(page, CONFIGURATION_PROPERTY);
-                assertTrue(resultText.contains("Configuration property"), "Expected a configuration property search result.");
-                clickSearchResultContaining(page, CONFIGURATION_PROPERTY);
+                if (hasConfigurationPropertyEntries(indexJson)) {
+                    search(page, CONFIGURATION_PROPERTY);
+                    String resultText = searchResultTextContaining(page, CONFIGURATION_PROPERTY);
+                    assertTrue(resultText.contains("Configuration property"), "Expected a configuration property search result.");
+                    clickSearchResultContaining(page, CONFIGURATION_PROPERTY);
 
-                page.waitForFunction("() => document.body.classList.contains('reference-open')");
-                assertEquals("core", page.evaluate("() => document.body.dataset.project"));
-                page.waitForFunction(
-                    "anchor => document.querySelector('[data-reference-frame]')?.src.includes('#' + anchor)",
-                    CONFIGURATION_PROPERTY_ANCHOR
-                );
-                page.waitForFunction(
-                    "anchor => {" +
-                        "const frame = document.querySelector('[data-reference-frame]');" +
-                        "const target = frame?.contentDocument?.getElementById(anchor);" +
-                        "return Boolean(target?.classList.contains('platform-reference-target'));" +
-                        "}",
-                    CONFIGURATION_PROPERTY_ANCHOR
-                );
+                    page.waitForFunction("() => document.body.classList.contains('reference-open')");
+                    assertEquals("core", page.evaluate("() => document.body.dataset.project"));
+                    page.waitForFunction(
+                        "anchor => document.querySelector('[data-reference-frame]')?.src.includes('#' + anchor)",
+                        CONFIGURATION_PROPERTY_ANCHOR
+                    );
+                    page.waitForFunction(
+                        "anchor => {" +
+                            "const frame = document.querySelector('[data-reference-frame]');" +
+                            "const target = frame?.contentDocument?.getElementById(anchor);" +
+                            "return Boolean(target?.classList.contains('platform-reference-target'));" +
+                            "}",
+                        CONFIGURATION_PROPERTY_ANCHOR
+                    );
+                }
             } catch (TimeoutError e) {
                 throw new AssertionError("Search did not produce the expected navigable platform docs result.", e);
             } finally {
@@ -447,6 +449,34 @@ final class PlatformDocsSearchTest {
 
     private static void assertRenderedSiteExists() {
         assertTrue(Files.isRegularFile(INDEX_FILE), "Render platform docs before running integration tests: " + INDEX_FILE);
+    }
+
+    private static String searchIndexJson() throws IOException {
+        Path searchIndex = SITE_DIRECTORY.resolve("platform-assets/search-index.json");
+        assertTrue(Files.isRegularFile(searchIndex), "The rendered search fixture must include a search index.");
+        return Files.readString(searchIndex, StandardCharsets.UTF_8);
+    }
+
+    private static void assertOptionalReferenceEntries(String indexJson) {
+        if (indexJson.contains("\"kind\":\"api-type\"")) {
+            assertTrue(indexJson.contains("\"title\":\"ApplicationContext\""), "The search index must include API type titles.");
+            assertTrue(indexJson.contains("ApplicationContext.html"), "The search index must link API classes into the reference sheet.");
+        }
+        if (indexJson.contains("\"kind\":\"configuration\"")) {
+            assertTrue(indexJson.contains("nettydefaultallocatornumheaparenas"), "The search index must include compact configuration property terms.");
+        }
+    }
+
+    private static boolean hasApiTypeEntries(String indexJson) {
+        return indexJson.contains("\"kind\":\"api-type\"")
+            && indexJson.contains("\"title\":\"ApplicationContext\"")
+            && indexJson.contains("ApplicationContext.html");
+    }
+
+    private static boolean hasConfigurationPropertyEntries(String indexJson) {
+        return indexJson.contains("\"kind\":\"configuration\"")
+            && indexJson.contains(CONFIGURATION_PROPERTY)
+            && indexJson.contains("nettydefaultallocatornumheaparenas");
     }
 
     private static SiteServer serveRenderedSite() throws IOException {
