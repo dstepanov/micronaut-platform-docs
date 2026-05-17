@@ -82,6 +82,12 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
             require(Files.isRegularFile(documentScriptFile), "Missing lazy document script fallback for " + project.slug());
             String documentHtml = Files.readString(documentFile, StandardCharsets.UTF_8);
             require(!documentHtml.contains("intellij-platform-"), "Generated code highlighting still uses the IntelliJ Shiki theme for " + project.slug());
+            require(!documentHtml.contains("highlightjs"), "Generated document still contains Highlight.js classes for " + project.slug());
+            require(
+                !documentHtml.contains(" hljs") && !documentHtml.contains("class=\"hljs"),
+                "Generated document still contains old Highlight.js code classes for " + project.slug()
+            );
+            require(!documentHtml.contains("class=\"fa "), "Generated document still contains old Font Awesome icon classes for " + project.slug());
             for (String section : sections) {
                 require(documentHtml.contains("id=\"" + section + "\""), "Missing content anchor " + section + " for " + project.slug());
             }
@@ -125,6 +131,7 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(html.contains("<body class=\"body js"), "Generated page does not use Micronaut guide body font hooks.");
         require(html.contains("id=\"docs\""), "Generated page does not use the docs body id.");
         require(html.contains("href=\"platform-assets/site.css\""), "Generated page does not reference the external stylesheet.");
+        require(html.contains("rel=\"icon\" href=\"platform-assets/icons/micronaut-sally.svg\""), "Generated page does not reference the Micronaut favicon.");
         require(html.contains("src=\"platform-assets/site.js\""), "Generated page does not reference the external script.");
         require(!html.contains("href=\"guide-assets/css/"), "Generated page imports classpath Micronaut guide CSS.");
         require(!html.contains("href=\"guide-assets/style/"), "Generated page imports old Micronaut guide template CSS.");
@@ -157,7 +164,10 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
         require(!siteScript.contains("highlightGuideCode"), "Generated script still contains runtime syntax highlighting.");
         require(!siteScript.contains("docs-code-language-hint"), "Generated script still adds code sample language hints.");
         require(!siteCss.contains("docs-code-language-hint"), "Generated stylesheet still styles code sample language hints.");
+        require(!siteCss.contains(".fa"), "Generated stylesheet still targets old Font Awesome guide icons.");
+        require(!siteCss.contains("pre.highlight"), "Generated stylesheet still targets old Highlight.js pre classes.");
         require(!CODE_SAMPLE_IMPORTANT_STYLE.matcher(siteCss).find(), "Generated code sample styles still rely on !important.");
+        verifyNoSeparateGeneratedGuidePages(outputDirectory, projects);
         getLogger().quiet("Verified generated platform docs page for {} projects.", projects.size());
     }
 
@@ -187,5 +197,39 @@ public abstract class VerifyPlatformDocsTask extends DefaultTask {
             sections.add(matcher.group(1));
         }
         return sections;
+    }
+
+    private static void verifyNoSeparateGeneratedGuidePages(Path outputDirectory, List<GuideProject> projects) throws IOException {
+        for (GuideProject project : projects) {
+            Path generatedDocs = outputDirectory.resolve("assets").resolve(project.slug()).resolve("docs");
+            if (!Files.isDirectory(generatedDocs)) {
+                continue;
+            }
+            require(!Files.exists(generatedDocs.resolve("index.html")), "Generated docs copied a separate project index for " + project.slug());
+            require(!Files.exists(generatedDocs.resolve("css")), "Generated docs copied old guide CSS for " + project.slug());
+            require(!Files.exists(generatedDocs.resolve("js")), "Generated docs copied old guide JavaScript for " + project.slug());
+            require(!Files.exists(generatedDocs.resolve("style")), "Generated docs copied old guide template fragments for " + project.slug());
+            require(!Files.exists(generatedDocs.resolve("fonts")), "Generated docs copied old guide fonts for " + project.slug());
+            Path guideDirectory = generatedDocs.resolve("guide");
+            if (Files.isDirectory(guideDirectory)) {
+                try (var stream = Files.walk(guideDirectory)) {
+                    for (Path path : stream.filter(Files::isRegularFile).toList()) {
+                        String relativePath = guideDirectory.relativize(path).toString().replace('\\', '/');
+                        require(
+                            relativePath.equals("configurationreference.html"),
+                            "Generated docs copied a separate guide page for " + project.slug() + ": " + relativePath
+                        );
+                    }
+                }
+                Path configurationReference = guideDirectory.resolve("configurationreference.html");
+                if (Files.isRegularFile(configurationReference)) {
+                    String referenceHtml = Files.readString(configurationReference, StandardCharsets.UTF_8);
+                    require(!referenceHtml.contains("../css/"), "Configuration reference still imports old guide CSS for " + project.slug());
+                    require(!referenceHtml.contains("../js/"), "Configuration reference still imports old guide JavaScript for " + project.slug());
+                    require(!referenceHtml.contains("initHighlightingOnLoad"), "Configuration reference still initializes old guide highlighting for " + project.slug());
+                    require(!referenceHtml.contains("clipboard.js"), "Configuration reference still imports old clipboard integration for " + project.slug());
+                }
+            }
+        }
     }
 }

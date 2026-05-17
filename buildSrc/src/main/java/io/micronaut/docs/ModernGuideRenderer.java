@@ -55,6 +55,7 @@ final class ModernGuideRenderer {
             engine.setRenderer(renderer);
             engine.setEngineProperties(engineProperties(attributes));
             putEngineAttributes(engine, attributes);
+            removeLegacyEngineAttributes(engine);
             context.setRenderEngine(engine);
 
             GuideToc guide = GuideToc.readSource(guideSource);
@@ -102,8 +103,6 @@ final class ModernGuideRenderer {
         attributes.put("version", platformVersion);
         attributes.put("safe", "UNSAFE");
         attributes.put("imagesdir", "../img");
-        attributes.put("icons", "font");
-        attributes.put("source-highlighter", "highlightjs");
         attributes.put("sourcedir", submoduleDirectory.toString());
         attributes.put("sourceDir", submoduleDirectory.toString());
         attributes.put("includedir", trailingSlash(submoduleDirectory.resolve("build/working/01-includes")));
@@ -149,6 +148,11 @@ final class ModernGuideRenderer {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static void putEngineAttributes(AsciiDocEngine engine, Map<String, Object> attributes) {
         engine.getAttributes().putAll(attributes);
+    }
+
+    private static void removeLegacyEngineAttributes(AsciiDocEngine engine) {
+        engine.getAttributes().remove("icons");
+        engine.getAttributes().remove("source-highlighter");
     }
 
     private void appendGuideNode(

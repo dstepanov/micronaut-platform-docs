@@ -24,6 +24,7 @@ const requestedLanguages = [
   "markdown",
   "properties",
   "python",
+  "regexp",
   "shellscript",
   "sql",
   "toml",
@@ -64,7 +65,7 @@ function highlightHtml(html) {
   return html.replace(/<pre\b([^>]*)>\s*<code\b([^>]*)>([\s\S]*?)<\/code>\s*<\/pre>/gi, (match, preAttributes, codeAttributes, codeHtml) => {
     const language = shikiLanguage(codeAttributes);
     if (!language || !highlighter.getLoadedLanguages().includes(language)) {
-      return match;
+      return normalizeCodeBlock(preAttributes, codeAttributes, codeHtml);
     }
     const { source, callouts } = codeSource(codeHtml);
     if (!source.trim()) {
@@ -114,6 +115,7 @@ function normalizeLanguage(language) {
     hocon: "json",
     "json-config": "json",
     maven: "xml",
+    regex: "regexp",
     sh: "bash",
     shell: "bash",
     yml: "yaml",
@@ -133,6 +135,24 @@ function codeSource(codeHtml) {
     source: decodeHtml(withMarkers.replace(/<[^>]+>/g, "")),
     callouts
   };
+}
+
+function normalizeCodeBlock(preAttributes, codeAttributes, codeHtml) {
+  return "<pre" + normalizedAttributes(preAttributes, "docs-code-pre", ["highlightjs", "highlight", "hljs"]) + ">"
+    + "<code" + normalizedAttributes(codeAttributes, "", ["hljs"]) + ">"
+    + codeHtml
+    + "</code></pre>";
+}
+
+function normalizedAttributes(attributes, requiredClass, removedClasses) {
+  const withoutClass = attributes.replace(/\s*\bclass\s*=\s*"[^"]*"/i, "");
+  const classes = attribute(attributes, "class")
+    .split(/\s+/)
+    .filter((className) => className && !removedClasses.includes(className));
+  if (requiredClass && !classes.includes(requiredClass)) {
+    classes.push(requiredClass);
+  }
+  return classes.length ? " class=\"" + escapeAttribute(classes.join(" ")) + "\"" + withoutClass : withoutClass;
 }
 
 function shikiCodeAttributes(attributes) {

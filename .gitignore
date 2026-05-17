@@ -4,3 +4,5 @@ build/
 buildSrc/build/
 out/
 .DS_Store
+.playwright-mcp/
+platform-docs-*.png

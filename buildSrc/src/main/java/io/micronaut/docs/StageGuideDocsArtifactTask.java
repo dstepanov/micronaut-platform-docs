@@ -74,7 +74,7 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
         deleteDirectory(outputDirectory);
         Files.createDirectories(outputDirectory);
         getLogger().quiet(
-            "Staging guide docs artifact for {} of {} projects (shard {}/{}).",
+            "Staging platform-rendered guide fragments for {} of {} projects (shard {}/{}).",
             selectedProjects.size(),
             projects.size(),
             selection.shardIndex() + 1,
@@ -85,9 +85,8 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
         for (GuideProject project : selectedProjects) {
             Path sourceDirectory = projectDirectory.resolve(project.generatedDocsPath());
             getLogger().quiet("[{}/{}] Staging {} platform guide fragment.", ++index, selectedProjects.size(), project.displayName());
-            if (Files.isDirectory(sourceDirectory)) {
-                Path targetDirectory = outputDirectory.resolve(project.generatedDocsPath());
-                copyDirectory(sourceDirectory, targetDirectory);
+            Path targetDirectory = outputDirectory.resolve(project.generatedDocsPath());
+            if (GeneratedReferenceDocs.copyReferenceDocs(sourceDirectory, targetDirectory, GeneratedReferenceDocs.FileTransformer.RAW)) {
                 getLogger().quiet("[{}/{}] Staged {} API and configuration reference output.", index, selectedProjects.size(), project.displayName());
             } else {
                 getLogger().quiet("[{}/{}] No generated reference output found for {}; skipping reference assets.", index, selectedProjects.size(), project.displayName());
@@ -118,20 +117,6 @@ public abstract class StageGuideDocsArtifactTask extends DefaultTask {
         Path target = outputDirectory.resolve(project.tocPath());
         Files.createDirectories(target.getParent());
         Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-    }
-
-    private static void copyDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
-        try (var stream = Files.walk(sourceDirectory)) {
-            for (Path source : stream.toList()) {
-                Path target = targetDirectory.resolve(sourceDirectory.relativize(source).toString());
-                if (Files.isDirectory(source)) {
-                    Files.createDirectories(target);
-                } else {
-                    Files.createDirectories(target.getParent());
-                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-        }
     }
 
     private static void deleteDirectory(Path directory) throws IOException {

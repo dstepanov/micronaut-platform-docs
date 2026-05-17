@@ -54,7 +54,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build-guides:
-    name: Render guide source shard ${{ matrix.shard }}
+    name: Render platform fragment shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
     needs:
@@ -83,13 +83,13 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Render guide source shard
+      - name: Render platform fragment shard
         run: ./gradlew -q verifyPlatformAlignment stagePlatformGuideDocsArtifact
 
-      - name: Upload guide source shard
+      - name: Upload platform fragment shard
         uses: actions/upload-artifact@v6
         with:
-          name: guide-docs-shard-${{ matrix.shard }}
+          name: platform-doc-fragments-shard-${{ matrix.shard }}
           path: build/guide-docs-artifact
           if-no-files-found: error
           retention-days: 1
@@ -144,10 +144,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Download guide docs shards
+      - name: Download platform fragment shards
         uses: actions/download-artifact@v6
         with:
-          pattern: guide-docs-shard-*
+          pattern: platform-doc-fragments-shard-*
           path: .
           merge-multiple: true
 

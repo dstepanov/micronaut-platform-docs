@@ -72,7 +72,7 @@ build/site/
 - `syncPlatformGuideShardSubmodules`: initializes and aligns only the projects selected by `platformDocs.guideShardIndex` / `platformDocs.guideShardCount`.
 - `alignPlatformVersions`: checks out every selected docs submodule at the platform-managed tag.
 - `verifyPlatformAlignment`: verifies selected submodule HEADs match expected platform tags.
-- `buildPlatformGuideDocs`: optional slow task that runs each selected submodule's `./gradlew -q -Dorg.gradle.vfs.watch=false docs` only when API or configuration reference output under `build/docs` must be refreshed.
+- `buildPlatformGuideDocs`: optional slow task that runs each selected submodule's `./gradlew -q -Dorg.gradle.vfs.watch=false docs` only when API or configuration reference output under `build/docs` must be refreshed. The platform site ignores the old generated guide pages.
 - `stagePlatformGuideDocsArtifact`: renders selected guide sources with the platform renderer and stages the fragments plus any available reference output under `build/guide-docs-artifact`.
 - `renderPlatformDocs`: renders the single-page site from source guides or staged guide fragments. It does not run submodule docs tasks.
 - `generatePlatformDocs`: verifies alignment and renders the site from source guides or staged guide fragments. It does not run submodule docs tasks.
@@ -206,9 +206,10 @@ The renderer should use project sources, not downloaded docs:
 - `Renderer.CodeSample` carries the normalized selector language, syntax highlighter language, renderable source, and snippet CSS class. Platform renderers must consume those fields directly instead of rendering an Asciidoctor block and parsing `<pre>`/`<code>` HTML to rediscover the same metadata.
 - `PlatformGuideHtmlRenderer.renderLanguageSnippet` must render those DTO sources directly. Do not parse Asciidoc include directives or post-process already-rendered HTML inside this project.
 - The renderer sets Asciidoctor attributes from the submodule `gradle.properties` and platform version data.
+- The renderer removes the docs engine's legacy `icons=font` and `source-highlighter=coderay` defaults after creating the engine. Platform guide fragments should not emit Font Awesome or legacy highlighter classes.
 - The renderer temporarily sets `user.dir` to the submodule directory because legacy snippet macros depend on it.
 - Includes use the submodule root as the Asciidoctor base directory.
-- Generated `build/docs` output is optional at render time. When it exists, API docs and configuration reference pages are copied from submodule builds.
+- Generated `build/docs` output is optional at render time. When it exists, only `api/**` and `guide/configurationreference.html` are copied from submodule builds; old generated guide pages, CSS, JavaScript, fonts, and template fragments are intentionally not published.
 - GitHub Actions shard jobs render each guide fragment from source while the selected submodules are initialized, then stage it as `repos/<project>/build/platform-docs/guide.html`.
 - The final render job reads staged `build/platform-docs/guide.html` fragments when present, so it does not need to initialize all guide source submodules after downloading shard artifacts.
 - Local UI assets are copied from `buildSrc/src/main/resources/io/micronaut/docs/assets`.
@@ -232,7 +233,7 @@ The platform docs page has two different sources of markup and one owner for vis
 - The application shell markup comes from Handlebars templates in `buildSrc/src/main/resources/io/micronaut/docs/templates`. This includes the sidebar, top bar, overview cards, document metadata buttons, search UI, reference sheet, lazy document hosts, and project/category grouping.
 - The platform page must style both sources with `buildSrc/src/main/resources/io/micronaut/docs/assets/site.css`. Generated `index.html` should import only `platform-assets/site.css` as a stylesheet.
 - Do not import CSS from `guide-assets/css/*`, `guide-assets/style/*`, generated Javadocs, generated configuration reference pages, or the old Micronaut docs template into the main platform page.
-- `VerifyPlatformDocsTask` enforces this by checking that generated `index.html` references `platform-assets/site.css` and does not contain `guide-assets/` or `multi-language-sample.js`.
+- `VerifyPlatformDocsTask` enforces this by checking that generated `index.html` references `platform-assets/site.css`, does not contain `guide-assets/` or `multi-language-sample.js`, generated fragments do not keep Highlight.js or old Font Awesome classes, and copied reference assets do not include old generated guide pages.
 
 Style ownership:
 
@@ -241,7 +242,7 @@ Style ownership:
 - Reusable chrome such as `.topbar`, `.sidebar`, `.document-meta`, `.reference-panel`, `.site-search`, and `.theme-toggle` uses the platform shell font variable and should not inherit old guide CSS.
 - Rendered guide content is scoped under `.guide-document`. Add rules there when styling docs-engine output such as `.paragraph`, `.listingblock`, `.tableblock`, `.admonitionblock`, `.sect1`, `pre`, `code`, and generated heading levels.
 - Overview cards use `.project-card*` classes. Sidebar entries use `.project-section`, `.toc-section`, `.toc-link`, and `.toc-*` classes. Do not style these through generic guide selectors.
-- Reference iframe pages are the exception: `GeneratePlatformDocsTask.transformEmbeddedReferenceHtml` injects a small embedded style into copied API/configuration pages so the iframe hides old page chrome and highlights targeted configuration rows.
+- Reference iframe pages are the exception: `GeneratePlatformDocsTask.transformEmbeddedReferenceHtml` injects a small embedded style into copied API/configuration pages so the iframe hides old page chrome and highlights targeted configuration rows. Configuration reference pages also have old guide stylesheet/script tags stripped because the platform reference CSS owns that iframe view.
 
 Code sample styling:
 

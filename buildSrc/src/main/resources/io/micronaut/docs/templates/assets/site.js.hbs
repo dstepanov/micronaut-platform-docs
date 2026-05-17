@@ -228,7 +228,7 @@ function applySnippetCardClasses(block) {
     block?.classList?.toggle("docs-snippet-card-dependency", dependency);
 }
 
-function upgradeCodeBlocks(root) {
+function hydrateListingBlocks(root) {
     root.querySelectorAll(".listingblock:not([data-code-block])").forEach((block) => {
         const code = block.querySelector("pre code");
         const content = block.querySelector(".content");
@@ -1078,7 +1078,7 @@ function requestProjectDocument(project, article) {
 
 function hydrateGuideDocument(article) {
     try {
-        upgradeCodeBlocks(article);
+        hydrateListingBlocks(article);
         ensureMultiLanguageSelectors(article);
         integrateMultiLanguageTabs(article);
         if (typeof postProcessCodeCallouts === "function") {

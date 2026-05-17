@@ -218,7 +218,7 @@ final class PlatformGuideHtmlRenderer extends DefaultRenderer {
         String normalizedHighlighterLanguage = normalizeLanguage(highlighterLanguage);
         String languageClass = normalizedHighlighterLanguage.isBlank() ? "" : " class=\"language-" + attribute(normalizedHighlighterLanguage) + "\"";
         String dataLanguageAttribute = normalizedDataLanguage.isBlank() ? "" : " data-lang=\"" + attribute(normalizedDataLanguage) + "\"";
-        return "<pre class=\"highlightjs highlight\"><code" + languageClass + dataLanguageAttribute + ">" + codeHtml + "</code></pre>";
+        return "<pre class=\"docs-code-pre\"><code" + languageClass + dataLanguageAttribute + ">" + codeHtml + "</code></pre>";
     }
 
     private static boolean isDependencySnippet(String language, String pre) {
@@ -261,7 +261,7 @@ final class PlatformGuideHtmlRenderer extends DefaultRenderer {
             <table class="docs-admonition-card-layout">
             <tbody>
             <tr>
-            <td class="icon docs-admonition-card-icon"><i class="fa icon-%s" title="%s"></i></td>
+            <td class="icon docs-admonition-card-icon"><i class="docs-admonition-icon docs-admonition-icon-%s" title="%s"></i></td>
             <td class="content docs-admonition-card-content">%s</td>
             </tr>
             </tbody>

@@ -69,6 +69,18 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
     private static final Pattern IMG_TAG = Pattern.compile("<img\\b[^>]*>", Pattern.CASE_INSENSITIVE);
     private static final Pattern PARAGRAPH_TAG = Pattern.compile("<p\\b[^>]*>(.*?)</p>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern CONFIGURATION_PROPERTY_ROW = Pattern.compile("<tr(\\b[^>]*)>\\s*(<td\\b[^>]*>\\s*<p\\b[^>]*>\\s*<code>(.*?)</code>\\s*</p>\\s*</td>)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern OLD_GUIDE_STYLESHEET_LINK = Pattern.compile(
+        "\\s*<link\\b(?=[^>]*\\bhref=\"\\.\\./css/)[^>]*>\\s*",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern OLD_GUIDE_SCRIPT = Pattern.compile(
+        "\\s*<script\\b(?=[^>]*\\bsrc=\"(?:\\.\\./js/|https://cdnjs\\.cloudflare\\.com/ajax/libs/clipboard\\.js/))[^>]*>\\s*</script>\\s*",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern OLD_GUIDE_INLINE_HIGHLIGHT_SCRIPT = Pattern.compile(
+        "\\s*<script>\\s*hljs\\.initHighlightingOnLoad\\(\\);\\s*</script>\\s*",
+        Pattern.CASE_INSENSITIVE
+    );
     private static final Pattern JAVADOC_SEARCH_OBJECT = Pattern.compile("\\{([^{}]*)}");
     private static final Pattern JAVADOC_SEARCH_FIELD = Pattern.compile("\"([plu])\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"");
     private static final Pattern SVG_TAG = Pattern.compile("<svg\\b([^>]*)>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
@@ -134,7 +146,7 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         int index = 0;
         for (GuideProject project : projects) {
             getLogger().quiet("[{}/{}] Rendering {}.", ++index, projects.size(), project.displayName());
-            if (copyGeneratedDocs(projectDirectory, outputDirectory, project)) {
+            if (copyGeneratedReferenceDocs(projectDirectory, outputDirectory, project)) {
                 getLogger().quiet("[{}/{}] Copied {} API and configuration reference output.", index, projects.size(), project.displayName());
             } else {
                 getLogger().quiet("[{}/{}] No generated reference output found for {}; guide content will still be rendered from sources.", index, projects.size(), project.displayName());
@@ -307,15 +319,20 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         return new TocItem(0, "", "Docs", "docs", projectAnchor(project));
     }
 
-    private static boolean copyGeneratedDocs(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {
+    private static boolean copyGeneratedReferenceDocs(Path projectDirectory, Path outputDirectory, GuideProject project) throws IOException {
         Path sourceDirectory = projectDirectory.resolve(project.generatedDocsPath());
-        if (!Files.isDirectory(sourceDirectory)) {
-            return false;
-        }
-
         Path targetDirectory = outputDirectory.resolve("assets").resolve(project.slug()).resolve("docs");
-        copyDirectory(sourceDirectory, targetDirectory);
-        return true;
+        return GeneratedReferenceDocs.copyReferenceDocs(sourceDirectory, targetDirectory, new GeneratedReferenceDocs.FileTransformer() {
+            @Override
+            public boolean shouldTransform(String relativePath) {
+                return isEmbeddedReferenceHtml(relativePath);
+            }
+
+            @Override
+            public String transform(String relativePath, String content) throws IOException {
+                return transformEmbeddedReferenceHtml(relativePath, content);
+            }
+        });
     }
 
     private static String renderProjectGuideHtml(
@@ -362,29 +379,6 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         }
     }
 
-    private static void copyDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
-        try (var stream = Files.walk(sourceDirectory)) {
-            for (Path source : stream.toList()) {
-                String relativePath = sourceDirectory.relativize(source).toString().replace('\\', '/');
-                Path target = targetDirectory.resolve(relativePath);
-                if (Files.isDirectory(source)) {
-                    Files.createDirectories(target);
-                } else {
-                    Files.createDirectories(target.getParent());
-                    if (isEmbeddedReferenceHtml(relativePath)) {
-                        Files.writeString(
-                            target,
-                            transformEmbeddedReferenceHtml(relativePath, Files.readString(source, StandardCharsets.UTF_8)),
-                            StandardCharsets.UTF_8
-                        );
-                    } else {
-                        Files.copy(source, target);
-                    }
-                }
-            }
-        }
-    }
-
     private static boolean isEmbeddedReferenceHtml(String relativePath) {
         return relativePath.equals("guide/configurationreference.html")
             || relativePath.startsWith("api/") && relativePath.endsWith(".html");
@@ -394,8 +388,15 @@ public abstract class GeneratePlatformDocsTask extends DefaultTask {
         String transformed = html;
         if (relativePath.equals("guide/configurationreference.html")) {
             transformed = injectConfigurationPropertyAnchors(transformed);
+            transformed = stripOldGuideAssets(transformed);
         }
         return injectEmbeddedReferenceStyle(transformed);
+    }
+
+    private static String stripOldGuideAssets(String html) {
+        String transformed = OLD_GUIDE_STYLESHEET_LINK.matcher(html).replaceAll("\n");
+        transformed = OLD_GUIDE_SCRIPT.matcher(transformed).replaceAll("\n");
+        return OLD_GUIDE_INLINE_HIGHLIGHT_SCRIPT.matcher(transformed).replaceAll("\n");
     }
 
     private static String injectEmbeddedReferenceStyle(String html) throws IOException {

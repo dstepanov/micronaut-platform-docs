@@ -118,11 +118,11 @@ The generator then:
 - parses `toc.yml` through the platform `GuideToc` model so rendering, sidebar entries, page-index data, search entries, and verification all use the same numbered source index
 - renders guide body markup directly from each project's source `.adoc` files through `ModernGuideRenderer` and `PlatformGuideHtmlRenderer`, unless a staged `build/platform-docs/guide.html` fragment is available
 - prefixes anchors so all guides can coexist in one page
-- copies generated API and configuration reference output from `build/docs` to `build/site/assets/<project>/docs` when that output exists
+- copies only generated API output and `guide/configurationreference.html` from `build/docs` to `build/site/assets/<project>/docs` when that output exists
 - copies local UI assets to `build/site/platform-assets`
 - renders the shell, sidebar, and overview categories with Handlebars templates
 
-The platform renderer uses the `io.micronaut.docs.Renderer` API from the vendored `micronaut-docs-build-plugins` jar. It emits platform-owned snippet, dependency, configuration, admonition, and callout markup directly. Do not modernize the already-rendered HTML with regex passes, and do not import the old generated guide template assets into the main page.
+The platform renderer uses the `io.micronaut.docs.Renderer` API from the vendored `micronaut-docs-build-plugins` jar. It emits platform-owned snippet, dependency, configuration, admonition, and callout markup directly. The renderer removes the docs engine's old `icons=font` and `source-highlighter=coderay` defaults so guide fragments do not emit Font Awesome or legacy highlighter classes. Do not modernize the already-rendered HTML with regex passes, and do not import the old generated guide template assets into the main page. Copied configuration reference pages have old guide stylesheet and script tags stripped before the platform reference iframe style is injected.
 
 `GuideToc` is the platform-owned source index for now. If Micronaut build later exposes a public TOC/index API, this project should switch to that API only when it can still drive rendering, sidebar entries, page-index entries, search entries, and verification from one stable model.
 
@@ -134,7 +134,7 @@ Open the generated page at:
 build/site/index.html
 ```
 
-For GitHub Actions, guide docs are built in independent shards and merged before rendering the final page. The matrix is generated from `gradle/platform-doc-shards.properties`:
+For GitHub Actions, platform-rendered guide fragments are produced in independent shards and merged before rendering the final page. The matrix is generated from `gradle/platform-doc-shards.properties`:
 
 ```bash
 ./gradlew -q writePlatformDocsShardMatrix
@@ -151,7 +151,8 @@ The shard artifact is staged under `build/guide-docs-artifact` with paths that c
 ```text
 build/guide-docs-artifact/repos/<project>/build/platform-docs/guide.html
 build/guide-docs-artifact/repos/<project>/src/main/docs/guide/toc.yml
-build/guide-docs-artifact/repos/<project>/build/docs        optional API/config reference output
+build/guide-docs-artifact/repos/<project>/build/docs/api
+build/guide-docs-artifact/repos/<project>/build/docs/guide/configurationreference.html
 ```
 
 ## Verification
@@ -177,8 +178,8 @@ build/guide-docs-artifact/repos/<project>/build/docs        optional API/config 
 | `syncPlatformProjectSubmodules` | Adds missing Micronaut project submodules and checks out platform-managed tags. | `.gitmodules`, `repos/*` |
 | `alignPlatformVersions` | Checks out each project submodule at the platform-managed release tag. | `repos/*` git state |
 | `verifyPlatformAlignment` | Verifies submodule HEAD tags match platform-managed versions. | No |
-| `buildPlatformGuideDocs` | Optional slow task that runs each submodule's `docs` task with Java 25 only when API/config reference output must be refreshed. | `repos/*/build/docs` |
-| `stagePlatformGuideDocsArtifact` | Stages platform-rendered guide fragments and any available reference docs for a selected shard. | `build/guide-docs-artifact` |
+| `buildPlatformGuideDocs` | Optional slow task that runs each submodule's `docs` task with Java 25 only when API/config reference output must be refreshed. The final site does not publish the old generated guide pages. | `repos/*/build/docs` |
+| `stagePlatformGuideDocsArtifact` | Stages platform-rendered guide fragments and only API/configuration reference docs for a selected shard. | `build/guide-docs-artifact` |
 | `renderPlatformDocs` | Renders the single-page site from project guide sources and any available reference docs. | `build/site` |
 | `generatePlatformDocs` | Verifies alignment and renders the single-page platform site from project sources. | `build/site` |
 | `verifyPlatformDocs` | Verifies generated HTML and required static assets. | No |

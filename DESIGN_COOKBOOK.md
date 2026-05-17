@@ -20,15 +20,18 @@ The site should feel like a compact developer documentation application: dense, 
 - Rendered guide markup comes from `ModernGuideRenderer` and `PlatformGuideHtmlRenderer` and must be styled through `.guide-document` selectors.
 - Guide structure comes from `GuideToc`, the platform-owned `toc.yml` source index. Use it for section numbers, sidebar entries, page-index entries, search section entries, and renderer traversal instead of parsing generated HTML or depending on old Micronaut build internal TOC classes.
 - Macro-specific guide HTML for snippets, dependencies, configuration samples, admonitions, and callout markers should be emitted directly by `PlatformGuideHtmlRenderer` through the docs plugin `Renderer` API. Do not style around a second pass that parses already-rendered HTML.
-- Embedded API and configuration reference pages are styled only through iframe-injected CSS loaded from `buildSrc/src/main/resources/io/micronaut/docs/assets/embedded-reference.css` by `GeneratePlatformDocsTask`.
+- Embedded API and configuration reference pages are styled only through iframe-injected CSS loaded from `buildSrc/src/main/resources/io/micronaut/docs/assets/embedded-reference.css` by `GeneratePlatformDocsTask`. Configuration reference pages must not keep old guide stylesheet, script, Highlight.js, or clipboard imports after transformation.
+- Copied generated docs are reference-only: publish `api/**` and `guide/configurationreference.html`, but never old generated guide pages, old guide CSS/JS, fonts, or template fragments.
 - Generated `index.html` must import only `platform-assets/site.css` for the platform shell. Do not import old guide CSS, Javadoc CSS, or configuration-reference CSS into the main page.
+- Platform-rendered guide fragments should not emit old template classes such as Font Awesome `fa` icons or Highlight.js `pre.highlight`/`hljs` classes. Use platform-owned classes and static Shiki output instead.
+- The docs engine may initialize legacy defaults. Keep `ModernGuideRenderer` responsible for removing those defaults before rendering rather than compensating for old classes in CSS.
 
 ## Tokens And Palette
 
 - Extend theme tokens before introducing new component colors.
-- Light mode uses a neutral gray page background with near-white panels: `--bg #f5f5f5`, `--surface #fcfcfc`, `--card-surface #ffffff`, `--surface-strong #eeeeee`, `--text #172026`, `--muted #5d6b78`, `--line #e0e0e0`, `--accent #00a676`, `--link #1565c0`.
+- Light mode uses a neutral gray page background with clean white panels: `--bg #f6f7f9`, `--surface #ffffff`, `--card-surface #ffffff`, `--surface-strong #eef2f4`, `--text #172026`, `--muted #5d6b78`, `--line #dce3e8`, `--accent #00a676`, `--link #1565c0`.
 - Dark mode separates chrome from content: sidebar and top bar are black, while content surfaces use neutral grays. Keep dark reading surfaces gray rather than pure black.
-- Code and dependency snippets use the same neutral code-frame palette, not blue-gray, IDE-themed, or dependency-specific frames. Light mode uses white or near-white snippet panels over the pale page; dark mode uses deeper neutral gray panels over the gray article surface.
+- Code and dependency snippets use the same neutral code-frame palette, not blue-gray, IDE-themed, or dependency-specific frames. Light mode uses a soft `#f8f9fb` snippet panel over the page background; dark mode uses a subdued `#242424` panel over the gray article surface.
 - Admonitions should be calm and low saturation unless the content is genuinely dangerous.
 
 ## Overview Page
@@ -36,7 +39,7 @@ The site should feel like a compact developer documentation application: dense, 
 - The overview description is a compact subtitle, not a hero. It stays full width, readable, and short enough not to consume the first mobile screen.
 - Categories are stacked sections. The category icon, title, and description must appear above that category's project cards.
 - Do not use a desktop layout where category text becomes a left rail and cards appear to the right.
-- Project cards should remain close to square on desktop, with a minimum grid track around `320px` so sparse categories do not render as tiny boxes. Keep name and short description in the header, concise long description in the body, and footer actions plus version metadata at the bottom.
+- Project cards should remain close to square on desktop, with a minimum grid track around `340px` so sparse categories do not render as tiny boxes. Keep name and short description in the header, concise long description in the body, and footer actions plus version metadata at the bottom.
 - Card text must not be ellipsized. If content is too long, shorten the description instead of hiding text.
 - Cards may use subtle elevation and borders, but no nested card structures.
 - Category counts stay hidden.
@@ -104,7 +107,7 @@ The site should feel like a compact developer documentation application: dense, 
 - Real snippet titles sit outside the code frame.
 - Unknown `[source]` snippets remain plaintext and must not be labeled Bash.
 - Shiki is static build-time highlighting only. Do not add runtime syntax highlighters.
-- Code frames separate from the guide background with a neutral frame surface plus a quiet 1px outer border. The light border is visible but soft; the dark border should be nearly invisible and subordinate to the darker frame background. Snippet cards do not use shadows.
+- Code frames separate from the guide background with a neutral frame surface plus a quiet 1px outer border and 8px radius. The light border is visible but soft; the dark border should be nearly invisible and subordinate to the darker frame background. Snippet cards do not use shadows.
 - Code, properties, and dependency snippets share the same shadcn-style card structure: `.docs-snippet-card` maps to Card, `.docs-snippet-card-header` to CardHeader, `.docs-snippet-card-title` to CardTitle, `.docs-snippet-card-action` to CardAction, `.docs-snippet-card-content` to CardContent, and `.docs-snippet-card-footer` to CardFooter. Keep these `docs-snippet-card-*` classes and `--snippet-card-*` tokens as the styling owners; treat `docs-code-*` classes as compatibility and behavior hooks for copying, tab hydration, and static highlighting.
 - Dependency snippets and properties snippets share the same background, border, separator, action, and footer token set as normal code snippets in both light and dark mode. Gradle, Maven, and Properties tabs should not introduce a second color system or separate card palette.
 - Tabs and code frames use the same neutral family. Keep a single split line between the tab row and code body: visible in light mode, almost invisible in dark mode. Tab labels should use compact system-sans typography around `12px / 16px`, regular weight, with only a modest selected-weight increase, and inactive labels must still meet readable contrast in both themes.
